@@ -1,0 +1,24 @@
+# Ideen für die Love-Letter-Website
+
+- **Gate & Hero**
+  - Animierter Übergang oder Countdown nach erfolgreichem Quiz.
+  - Austauschbare Fragen aus einer wachsenden JSON-Liste, optional tagesabhängig.
+- **Liebesbrief**
+  - Audio-Button zum Vorlesen oder Abspielen von Hintergrundmusik.
+  - Abschnittsweises Freischalten (progressive Disclosure) statt eines kompletten Reveals.
+- **Galerie**
+  - Tags/Filter für Orte oder Momente (z. B. Urlaub, Alltag, Feier).
+  - "Vorher/Nachher"-Vergleich oder Heatmap mit Aufnahmeorten.
+- **Erinnerungen & Timeline**
+  - Kapitelstruktur für `Content.Memories` mit Detailansichten je Moment.
+  - Verknüpfung einzelner Erinnerungen mit passenden Spotify-Songs oder Sprachnotizen.
+- **Bucket List**
+  - ICS-/Kalenderlinks aus jedem Eintrag heraus erstellen.
+  - Glücksrad-Gewinne mit Einträgen verknüpfen (Wheel => "Welcher Punkt als Nächstes?").
+  - Fortschrittsdiagramm über erledigte vs. offene Punkte.
+- **Songs**
+  - Persönliche Kommentare oder Lieblingszitate pro Track.
+  - Shuffle-/Auto-Play-Funktion mit integrierten Preview-Streams (falls verfügbar).
+- **Allgemein**
+  - Optionaler Newsletter oder Update-Feed für neue Inhalte.
+  - Verbesserte Barrierefreiheit (Screenreader-Texte, Tastaturnavigation, farbblinde Themes).

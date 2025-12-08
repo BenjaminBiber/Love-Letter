@@ -1,0 +1,415 @@
+@page "/gallery"
+@using System.ComponentModel.DataAnnotations
+@using System.IO
+@using System.Linq
+@inject IGalleryService GalleryService
+
+<PageTitle>Galerie</PageTitle>
+
+<div class="background-glow"></div>
+
+<main class="gallery-page">
+    <section class="gallery-page__header">
+        <div>
+            <p class="section-eyebrow">Galerie</p>
+            <h1>Alle unsere Momente</h1>
+            <p class="section-subtext">Markiere bis zu @FavoriteLimit Favoriten. Diese tauchen automatisch auf der Startseite auf.</p>
+        </div>
+        <div class="gallery-page__actions">
+            <button class="gallery-page__add-btn" type="button" @onclick="OpenAddDialog">Bild hinzufügen</button>
+            <span class="gallery-page__hint">@FavoriteCount / @FavoriteLimit Favoriten</span>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(_pageMessage))
+    {
+        <p class="gallery-page__message">@_pageMessage</p>
+    }
+
+    @if (_isLoading)
+    {
+        <p class="gallery-page__empty">Lade deine Galerie...</p>
+    }
+    else if (!_photos.Any())
+    {
+        <div class="gallery-page__empty">
+            <p>Noch keine Bilder vorhanden.</p>
+            <button type="button" class="gallery-page__add-btn" @onclick="OpenAddDialog">Jetzt das erste hochladen</button>
+        </div>
+    }
+    else
+    {
+        <div class="gallery-page__grid">
+            @foreach (var photo in _photos)
+            {
+                <article class="gallery-card gallery-page__card @(photo.IsFavorite ? "is-favorite" : string.Empty)">
+                    <div class="gallery-card__image">
+                        <button type="button"
+                                class="gallery-card__preview"
+                                @onclick="() => OpenPhotoOverlay(photo)"
+                                aria-label="Foto in voller Größe anzeigen">
+                            <img src="@(photo.ThumbnailUrl ?? photo.Url)" alt="@(!string.IsNullOrWhiteSpace(photo.Caption) ? photo.Caption : "Galeriebild")" loading="lazy" />
+                        </button>
+                        <button class="gallery-card__favorite-toggle @(photo.IsFavorite ? "is-active" : string.Empty)"
+                                type="button"
+                                aria-pressed="@photo.IsFavorite"
+                                aria-label="@(photo.IsFavorite ? "Favorit entfernen" : "Als Favorit markieren")"
+                                title="@(photo.IsFavorite ? "Favorit entfernen" : "Als Favorit markieren")"
+                                disabled="@IsFavoriteBusy(photo.Id)"
+                                @onclick="() => ToggleFavoriteAsync(photo)">
+                            <span aria-hidden="true">★</span>
+                        </button>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(photo.Caption))
+                    {
+                        <div class="gallery-card__body">
+                            <p class="gallery-card__caption">@photo.Caption</p>
+                        </div>
+                    }
+                </article>
+            }
+        </div>
+    }
+</main>
+
+@if (_activePhoto is not null)
+{
+    <div class="gallery-photo-overlay" role="dialog" aria-modal="true" @onclick="ClosePhotoOverlay">
+        <div class="gallery-photo-overlay__content"
+             tabindex="-1"
+             @onclick:stopPropagation="true">
+            <button type="button"
+                    class="gallery-photo-overlay__close"
+                    aria-label="Foto schließen"
+                    @onclick="ClosePhotoOverlay">
+                ✕
+            </button>
+            <img src="@_activePhoto.Url" alt="@_activePhoto.Caption" class="gallery-photo-overlay__image" />
+            @if (!string.IsNullOrWhiteSpace(_activePhoto.Caption))
+            {
+                <p class="gallery-photo-overlay__caption">@_activePhoto.Caption</p>
+            }
+        </div>
+    </div>
+}
+
+@if (_isDialogOpen)
+{
+    <div class="gallery-dialog" role="dialog" aria-modal="true" @onclick="CloseAddDialog">
+        <div class="gallery-dialog__content" @onclick:stopPropagation="true">
+            <header class="gallery-dialog__header">
+                <h2>Neues Bild hinzufügen</h2>
+                <button class="gallery-dialog__close" type="button" aria-label="Dialog schließen" @onclick="CloseAddDialog">✕</button>
+            </header>
+            <EditForm Model="_newPhotoForm" OnValidSubmit="SubmitPhotoAsync">
+                <DataAnnotationsValidator />
+                <div class="gallery-dialog__form">
+                    <label class="gallery-dialog__field">
+                        <span>Beschreibung (optional)</span>
+                        <InputText class="gallery-dialog__input" @bind-Value="_newPhotoForm.Caption" placeholder="Wie heißt dieser Moment?" />
+                        <ValidationMessage For="() => _newPhotoForm.Caption" />
+                    </label>
+
+                    <div class="gallery-dialog__field">
+                        <span>Fotos</span>
+                        <label class="gallery-dialog__file-btn">
+                            <span>@(_newPhotoFiles.Count == 0 ? "Fotos auswählen" : "Weitere Fotos wählen")</span>
+                            <InputFile accept="image/*" multiple class="gallery-dialog__file-input" OnChange="HandleNewPhotosSelected" />
+                        </label>
+                        <small>@GetSelectedFilesLabel()</small>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_dialogMessage))
+                    {
+                        <p class="gallery-dialog__message">@_dialogMessage</p>
+                    }
+
+                    <div class="gallery-dialog__actions">
+                        <button type="submit" class="gallery-dialog__submit" disabled="@_isSaving">
+                            @(_isSaving ? "Speichere..." : "Hochladen")
+                        </button>
+                        <button type="button" class="gallery-dialog__cancel" @onclick="CloseAddDialog">Abbrechen</button>
+                    </div>
+                </div>
+            </EditForm>
+            @if (_isSaving)
+            {
+                <div class="gallery-dialog__loader" aria-live="assertive">
+                    <span class="gallery-dialog__spinner" aria-hidden="true"></span>
+                    <p>@(_newPhotoFiles.Count > 1 ? "Fotos werden hochgeladen..." : "Foto wird hochgeladen...")</p>
+                    @if (_uploadProgressTotal > 0)
+                    {
+                        <p class="gallery-upload-progress">@($"{_uploadProgressProcessed}/{_uploadProgressTotal} Bilder hochgeladen")</p>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private const long MaxPhotoBytes = 15 * 1024 * 1024;
+
+    private readonly List<GalleryPhotoDto> _photos = [];
+    private GalleryPhotoDto? _activePhoto;
+    private readonly HashSet<Guid> _favoriteBusy = [];
+
+    private bool _isLoading;
+    private bool _isDialogOpen;
+    private bool _isSaving;
+    private string? _pageMessage;
+    private string? _dialogMessage;
+    private int _uploadProgressTotal;
+    private int _uploadProgressProcessed;
+
+    private AddPhotoFormModel _newPhotoForm = new();
+    private readonly List<IBrowserFile> _newPhotoFiles = new();
+
+    private int FavoriteCount => _photos.Count(p => p.IsFavorite);
+    private int FavoriteLimit => GalleryService.FavoriteLimit;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPhotosAsync();
+    }
+
+    private async Task LoadPhotosAsync()
+    {
+        _isLoading = true;
+        _pageMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            _photos.Clear();
+            var photos = await GalleryService.GetPhotosAsync();
+            _photos.AddRange(photos);
+        }
+        catch
+        {
+            _pageMessage = "Konnte die Galerie nicht laden.";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OpenAddDialog()
+    {
+        _dialogMessage = null;
+        _isDialogOpen = true;
+        _newPhotoFiles.Clear();
+        _uploadProgressTotal = 0;
+        _uploadProgressProcessed = 0;
+    }
+
+    private void CloseAddDialog()
+    {
+        _isDialogOpen = false;
+        _dialogMessage = null;
+        _newPhotoForm = new AddPhotoFormModel();
+        _newPhotoFiles.Clear();
+        _uploadProgressTotal = 0;
+        _uploadProgressProcessed = 0;
+    }
+
+    private void OpenPhotoOverlay(GalleryPhotoDto photo)
+    {
+        _activePhoto = photo;
+    }
+
+    private void ClosePhotoOverlay()
+    {
+        _activePhoto = null;
+    }
+
+    private void HandleNewPhotosSelected(InputFileChangeEventArgs args)
+    {
+        var files = args.GetMultipleFiles();
+        _newPhotoFiles.Clear();
+
+        if (files.Count == 0)
+        {
+            _dialogMessage = null;
+            return;
+        }
+
+        var oversized = files.FirstOrDefault(file => file.Size > MaxPhotoBytes);
+        if (oversized is not null)
+        {
+            _dialogMessage = $"\"{oversized.Name}\" ist zu groß (maximal 15 MB).";
+            return;
+        }
+
+        _newPhotoFiles.AddRange(files);
+        _dialogMessage = _newPhotoFiles.Count == 1
+            ? $"{_newPhotoFiles[0].Name} ausgewählt."
+            : $"{_newPhotoFiles.Count} Dateien ausgewählt.";
+    }
+
+    private string GetSelectedFilesLabel()
+    {
+        if (_newPhotoFiles.Count == 0)
+        {
+            return "Noch kein Foto ausgewählt";
+        }
+
+        if (_newPhotoFiles.Count == 1)
+        {
+            return _newPhotoFiles[0].Name;
+        }
+
+        var preview = string.Join(", ", _newPhotoFiles.Take(3).Select(f => f.Name));
+        if (_newPhotoFiles.Count > 3)
+        {
+            preview += ", ...";
+        }
+
+        return $"{_newPhotoFiles.Count} Dateien: {preview}";
+    }
+
+    private async Task SubmitPhotoAsync()
+    {
+        if (_newPhotoFiles.Count == 0)
+        {
+            _dialogMessage = "Bitte wähle mindestens ein Foto aus.";
+            return;
+        }
+
+        _isSaving = true;
+        _dialogMessage = null;
+        _uploadProgressTotal = _newPhotoFiles.Count;
+        _uploadProgressProcessed = 0;
+        StateHasChanged();
+
+        var uploadedPhotos = new List<GalleryPhotoDto>();
+        var failedFiles = new List<string>();
+
+        try
+        {
+            foreach (var file in _newPhotoFiles)
+            {
+                try
+                {
+                    var uploaded = new UploadedMediaFile(
+                        file.Name,
+                        string.IsNullOrWhiteSpace(file.ContentType) ? "image/jpeg" : file.ContentType,
+                        file.Size,
+                        ct => Task.FromResult<Stream>(file.OpenReadStream(MaxPhotoBytes, ct)));
+
+                    var result = await GalleryService.UploadPhotoAsync(uploaded, _newPhotoForm.Caption);
+                    if (result.Success && result.Value is not null)
+                    {
+                        uploadedPhotos.Add(result.Value);
+                    }
+                    else
+                    {
+                        failedFiles.Add(file.Name);
+                    }
+                }
+                catch
+                {
+                    failedFiles.Add(file.Name);
+                }
+
+                _uploadProgressProcessed++;
+                if (_uploadProgressTotal > 0)
+                {
+                    _dialogMessage = $"{_uploadProgressProcessed}/{_uploadProgressTotal} Bilder hochgeladen...";
+                    StateHasChanged();
+                }
+            }
+
+            if (uploadedPhotos.Count > 0)
+            {
+                _photos.InsertRange(0, uploadedPhotos);
+                _photos.Sort(GallerySort);
+
+                _pageMessage = failedFiles.Count == 0
+                    ? (uploadedPhotos.Count == 1 ? "Bild gespeichert!" : $"{uploadedPhotos.Count} Bilder gespeichert!")
+                    : $"{uploadedPhotos.Count} Bilder gespeichert, {failedFiles.Count} fehlgeschlagen.";
+
+                CloseAddDialog();
+            }
+            else
+            {
+                _dialogMessage = failedFiles.Count == 1
+                    ? $"\"{failedFiles[0]}\" konnte nicht hochgeladen werden."
+                    : "Keine der Dateien konnte hochgeladen werden.";
+            }
+        }
+        finally
+        {
+            _isSaving = false;
+            _uploadProgressTotal = 0;
+            _uploadProgressProcessed = 0;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleFavoriteAsync(GalleryPhotoDto photo)
+    {
+        var targetState = !photo.IsFavorite;
+        if (targetState && FavoriteCount >= FavoriteLimit)
+        {
+            _pageMessage = $"Es sind bereits {FavoriteLimit} Favoriten ausgewählt.";
+            StateHasChanged();
+            return;
+        }
+
+        _favoriteBusy.Add(photo.Id);
+        StateHasChanged();
+
+        try
+        {
+            var result = await GalleryService.SetFavoriteStateAsync(photo.Id, targetState);
+            if (result.Success && result.Value is not null)
+            {
+                var updated = result.Value;
+                var index = _photos.FindIndex(p => p.Id == updated.Id);
+                if (index >= 0)
+                {
+                    _photos[index] = updated;
+                }
+                _pageMessage = targetState ? "Als Favorit markiert." : "Favorit entfernt.";
+                _photos.Sort(GallerySort);
+            }
+            else
+            {
+                _pageMessage = result.Error ?? "Favorit konnte nicht aktualisiert werden.";
+            }
+        }
+        catch
+        {
+            _pageMessage = "Favorit konnte nicht aktualisiert werden.";
+        }
+        finally
+        {
+            _favoriteBusy.Remove(photo.Id);
+            StateHasChanged();
+        }
+    }
+
+    private int GallerySort(GalleryPhotoDto left, GalleryPhotoDto right)
+    {
+        var favoriteCompare = right.IsFavorite.CompareTo(left.IsFavorite);
+        if (favoriteCompare != 0)
+        {
+            return favoriteCompare;
+        }
+
+        var rightDate = right.FavoritedAt ?? right.CreatedAt;
+        var leftDate = left.FavoritedAt ?? left.CreatedAt;
+        return DateTime.Compare(rightDate, leftDate);
+    }
+
+    private bool IsFavoriteBusy(Guid id) => _favoriteBusy.Contains(id);
+
+    private sealed class AddPhotoFormModel
+    {
+        [StringLength(160, ErrorMessage = "Bitte maximal 160 Zeichen verwenden.")]
+        public string? Caption { get; set; }
+    }
+}

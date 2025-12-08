@@ -1,0 +1,1348 @@
+@page "/bucket-list"
+@using System.IO
+@using System.Linq
+@using System.ComponentModel.DataAnnotations
+@using LoveLetter.App.Models
+@using LoveLetter.App.Services
+@using Microsoft.AspNetCore.Components.Web
+@inject LoveConfig Content
+@inject IBucketListService BucketListService
+
+<PageTitle>Unsere Bucket List</PageTitle>
+
+<div class="background-glow"></div>
+
+<main class="bucket-page">
+    <section class="bucket" id="bucket-list">
+        <div class="section-header">
+            <p class="section-eyebrow">@Content.BucketList.Eyebrow</p>
+            <h2>@Content.BucketList.Heading</h2>
+            <p class="section-subtext">@Content.BucketList.Subheading</p>
+        </div>
+
+        <EditForm class="bucket__new" Model="_newEntry" OnValidSubmit="HandleBucketSubmitAsync">
+            <DataAnnotationsValidator />
+            <div class="bucket__form" >
+                <div class="bucket__fields">
+                    <InputText class="bucket__input"
+                               @bind-Value="_newEntry.Title"
+                               placeholder="Kurze Beschreibung eingeben"
+                               required />
+                    <label class="bucket__toggle">
+                        <InputCheckbox @bind-Value="_newEntry.RequiresPhoto" />
+                        <span>Foto beim Abschließen benötigt</span>
+                    </label>
+                </div>
+                <div class="bucket__form-actions">
+                    <button class="bucket__add-btn" type="submit" disabled="@_isSaving">@(_isSaving ? "Speichere..." : "Punkt hinzufügen")</button>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_statusMessage))
+                {
+                    <p class="bucket__message">@_statusMessage</p>
+                }
+                <ValidationSummary />
+            </div>
+        </EditForm>
+
+        @if (_isLoading)
+        {
+            <p class="bucket__empty">Lade deine Liste...</p>
+        }
+        else
+        {
+            @if (!_entries.Any())
+            {
+                <p class="bucket__empty">Noch nichts eingetragen – starte mit deinem ersten Punkt! ✨</p>
+            }
+            else
+            {
+                <div class="bucket__grid">
+                    @foreach (var entry in _entries)
+                    {
+                        var isCompleting = _completingEntries.Contains(entry.Id);
+                        <article class="bucket-card @(entry.Completed ? "is-complete" : string.Empty)">
+                            <div class="bucket-card__header">
+                                <div class="bucket-card__title">@entry.Title</div>
+                                <div class="bucket-card__actions">
+                                    @if (!entry.Completed)
+                                    {
+                                        <button class="bucket-card__complete @(isCompleting ? "is-saving" : string.Empty)"
+                                                type="button"
+                                                aria-label="@(isCompleting ? "Wird gespeichert..." : "Als erledigt markieren")"
+                                                disabled="@isCompleting"
+                                                @onclick="() => CompleteEntryAsync(entry)">
+                                            @if (isCompleting)
+                                            {
+                                                <span class="bucket-card__complete-icon bucket-card__complete-icon--spinner" aria-hidden="true"></span>
+                                            }
+                                            else
+                                            {
+                                                <svg class="bucket-card__complete-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                                    <path d="M9.17 20.25a1 1 0 0 1-.71-.29l-5.42-5.42a1 1 0 0 1 1.42-1.42l4.65 4.65 9.93-9.93a1 1 0 0 1 1.42 1.42l-10.64 10.64a1 1 0 0 1-.71.29Z" />
+                                                </svg>
+                                            }
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button"
+                                                class="bucket-card__edit"
+                                                aria-label="Eintrag bearbeiten"
+                                                title="Eintrag bearbeiten"
+                                                @onclick="() => OpenEditDialog(entry)">
+                                            <img src="/edit-246.svg" alt="" aria-hidden="true" />
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                            @if (!entry.Completed)
+                            {
+                                <p class="bucket-card__meta">
+                                    @(entry.RequiresPhoto ? "Foto oder Video beim Abschluss benötigt" : "Medien optional")
+                                </p>
+                            }
+
+                            @if (!entry.Completed)
+                            {
+                                <div class="bucket-card__upload">
+                                    <label class="bucket-upload-btn">
+                                        <span>@(entry.RequiresPhoto ? "Dateien auswählen" : "Optional: Dateien auswählen")</span>
+                                        <InputFile class="bucket-upload-input"
+                                                   multiple
+                                                   accept="image/*,video/*"
+                                                   OnChange="@(args => HandleMediaSelectedAsync(entry.Id, args))" />
+                                    </label>
+                                    <small>@GetMediaLabel(entry.Id)</small>
+                                </div>
+                            }
+
+                            @if (entry.Completed && entry.Media.Any())
+                            {
+                                if (entry.Media.Count > 0)
+                                {
+                                    <div class="bucket-card__media-section"
+                                         data-expanded="@entry.MediaExpanded.ToString().ToLowerInvariant()">
+                                        <button type="button"
+                                                class="bucket-card__media-toggle"
+                                                aria-expanded="@entry.MediaExpanded"
+                                                @onclick="() => ToggleMediaSection(entry)">
+                                            @(entry.MediaExpanded ? "Medien ausblenden" : "Medien anzeigen")
+                                        </button>
+                                        <div class="bucket-card__slider">
+                                            <div class="bucket-card__slider-media">
+                                                @if (entry.Media.Count > 1)
+                                                {
+                                                    <button type="button"
+                                                            class="bucket-card__slider-button bucket-card__slider-button--prev"
+                                                            aria-label="Vorheriges Medium"
+                                                            @onclick="() => ShowPreviousMedia(entry)">
+                                                        ‹
+                                                    </button>
+                                                    <button type="button"
+                                                            class="bucket-card__slider-button bucket-card__slider-button--next"
+                                                            aria-label="Nächstes Medium"
+                                                            @onclick="() => ShowNextMedia(entry)">
+                                                        ›
+                                                    </button>
+                                                }
+
+                                                @for (var mediaIndex = 0; mediaIndex < entry.Media.Count; mediaIndex++)
+                                                {
+                                                    var media = entry.Media[mediaIndex];
+                                                    var isActive = mediaIndex == entry.CurrentMediaIndex;
+
+                                                    <div class="bucket-card__media-layer @(isActive ? "is-active" : string.Empty)">
+                                                        @if (media.IsVideo)
+                                                        {
+                                                            if (isActive)
+                                                            {
+                                                                <video src="@media.Url"
+                                                                       controls
+                                                                       playsinline
+                                                                       preload="metadata"></video>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <button type="button"
+                                                                    class="bucket-card__media-trigger"
+                                                                    @onclick="() => OpenCurrentMedia(entry)"
+                                                                    aria-label="Foto zu @entry.Title in voller Größe anzeigen">
+                                                                <img src="@(media.ThumbnailUrl ?? media.Url)"
+                                                                     alt="Moment zu @entry.Title"
+                                                                     loading="lazy" />
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                }
+                                            </div>
+
+                                            @if (entry.Media.Count > 1)
+                                            {
+                                                <div class="bucket-card__slider-meta">
+                                                    <span class="bucket-card__slider-counter">@GetMediaCounter(entry)</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            }
+
+                            @if (isCompleting)
+                            {
+                                <div class="bucket-card__upload-loader" aria-live="polite">
+                                    <span class="bucket-card__upload-spinner" aria-hidden="true"></span>
+                                    <p>Medien werden hochgeladen...</p>
+                                    @if (_uploadProgress.TryGetValue(entry.Id, out var progress) && progress.Total > 0)
+                                    {
+                                        <small>@($"{progress.Processed}/{progress.Total} Dateien")</small>
+                                    }
+                                </div>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+        }
+    </section>
+</main>
+
+@if (_activeMedia is not null)
+{
+    var overlayEntry = _entries.FirstOrDefault(e => e.Id == _activeMedia.EntryId);
+    var canNavigateOverlay = overlayEntry?.Media.Count > 1;
+    <div class="bucket-photo-overlay" role="dialog" aria-modal="true" @onclick="CloseMedia">
+        @if (canNavigateOverlay)
+        {
+            <button type="button"
+                    class="bucket-photo-overlay__nav bucket-photo-overlay__nav--prev"
+                    aria-label="Vorheriges Medium"
+                    @onclick="ShowOverlayPreviousMedia"
+                    @onclick:stopPropagation="true">
+                ‹
+            </button>
+            <button type="button"
+                    class="bucket-photo-overlay__nav bucket-photo-overlay__nav--next"
+                    aria-label="Nächstes Medium"
+                    @onclick="ShowOverlayNextMedia"
+                    @onclick:stopPropagation="true">
+                ›
+            </button>
+        }
+        <div class="bucket-photo-overlay__content"
+             tabindex="-1"
+             @ref="_overlayContentRef"
+             @onclick:stopPropagation="true"
+             @onkeydown="HandleOverlayKey"
+             @onkeydown:stopPropagation="true"
+             @onpointerdown="HandleOverlayPointerDown"
+             @onpointerup="HandleOverlayPointerUp"
+             @onpointercancel="HandleOverlayPointerCancel"
+             @onpointerdown:stopPropagation="true"
+             @onpointerup:stopPropagation="true">
+            <button type="button"
+                    class="bucket-photo-overlay__close"
+                    aria-label="Medienansicht schließen"
+                    @onclick="CloseMedia">
+                ✕
+            </button>
+            @if (_activeMedia.CanAddToGallery)
+            {
+                <button type="button"
+                        class="bucket-photo-overlay__icon-action"
+                        aria-label="Zur Galerie hinzufügen"
+                        title="Zur Galerie hinzufügen"
+                        disabled="@_isAddingOverlayMedia"
+                        @onclick="AddActiveMediaToGalleryAsync">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M12 5a1 1 0 0 1 1 1v5h5a1 1 0 0 1 0 2h-5v5a1 1 0 0 1-2 0v-5H6a1 1 0 0 1 0-2h5V6a1 1 0 0 1 1-1Z" />
+                    </svg>
+                </button>
+            }
+            @if (_activeMedia.IsVideo)
+            {
+                <video src="@_activeMedia.Url"
+                       class="bucket-photo-overlay__image"
+                       controls
+                       playsinline
+                       preload="metadata"></video>
+            }
+            else
+            {
+                <img src="@_activeMedia.Url" alt="@_activeMedia.Title" class="bucket-photo-overlay__image" />
+            }
+            <p class="bucket-photo-overlay__caption">@_activeMedia.Title</p>
+            @if (_activeMedia.CanAddToGallery && !string.IsNullOrWhiteSpace(_overlayActionMessage))
+            {
+                <p class="bucket-photo-overlay__status">@_overlayActionMessage</p>
+            }
+        </div>
+    </div>
+}
+
+@if (_editingEntry is not null)
+{
+    <div class="bucket-edit-dialog" role="dialog" aria-modal="true" @onclick="CloseEditDialog">
+        <div class="bucket-edit-dialog__content" @onclick:stopPropagation="true">
+            <header class="bucket-edit-dialog__header">
+                <div>
+                    <p class="bucket-edit-dialog__eyebrow">Eintrag bearbeiten</p>
+                    <h3>@_editingEntry.Title</h3>
+                </div>
+                <button type="button" class="bucket-edit-dialog__close" aria-label="Dialog schließen" @onclick="CloseEditDialog">✕</button>
+            </header>
+
+            @if (!_isMasterPasswordValidated)
+            {
+                <section class="bucket-edit-dialog__section">
+                    <h4>Masterpasswort</h4>
+                    <label class="bucket-edit-dialog__password">
+                        <span>Nur mit gültigem Masterpasswort bearbeitbar</span>
+                        <div class="password-input">
+                            <InputText class="bucket-edit-dialog__password-input w-100"
+                                       type="@(_showMasterPassword ? "text" : "password")"
+                                       @bind-Value="_masterPasswordInput"
+                                       placeholder="Masterpasswort eingeben" />
+                            <button type="button"
+                                    class="input-eye-btn @(_showMasterPassword ? "is-visible" : "is-hidden")"
+                                    aria-label="Passwort anzeigen oder verstecken"
+                                    @onclick="ToggleMasterPasswordVisibility">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M12 4.5c-5 0-9.27 3.11-11 7.5 1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Zm0 12a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9Zm0-2a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+                                    <path d="m4 4 16 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                                </svg>
+                            </button>
+                        </div>
+                    </label>
+                    <button type="button"
+                            class="bucket-edit-dialog__submit mt-2"
+                            disabled="@_isVerifyingPassword"
+                            @onclick="VerifyMasterPasswordAsync">
+                        @(_isVerifyingPassword ? "Prüfe..." : "Freischalten")
+                    </button>
+                </section>
+            }
+
+            @if (_isMasterPasswordValidated)
+            {
+                <section class="bucket-edit-dialog__section">
+                    <h4>Vorhandene Medien (@_editingEntry.Media.Count)</h4>
+                    @if (!_editingEntry.Media.Any())
+                    {
+                        <p class="bucket-edit-dialog__empty">Noch keine Dateien vorhanden.</p>
+                    }
+                    else
+                    {
+                        <div class="bucket-edit-dialog__media-list justify-content-center  row">
+                            @foreach (var media in _editingEntry.Media)
+                            {
+                                var isRemoving = _removingMediaIds.Contains(media.Id);
+                                <li class="col-5">
+                                    <div>
+                                        <p>@(media.IsVideo ? "Video" : "Foto")</p>
+                                        <small>@media.OriginalFileName</small>
+                                    </div>
+                                    <button type="button"
+                                            class="bucket-edit-dialog__remove"
+                                            disabled="@isRemoving"
+                                            @onclick="() => RemoveMediaFromEntryAsync(media)">
+                                        @(isRemoving ? "Entferne..." : "Entfernen")
+                                    </button>
+                                </li>
+                            }
+                        </div>
+                    }
+                </section>
+
+                <div class="row">
+                    <div class="bucket-edit-dialog__section col-6 d-flex align-items-center flex-column">
+                        <div class="bucket-edit-dialog__upload">
+                            <label class="bucket-upload-btn">
+                                <span>Dateien auswählen</span>
+                                <InputFile class="bucket-upload-input" OnChange="HandleEditFilesSelected" multiple accept="image/*,video/*" />
+                            </label>
+                            <small>@GetEditUploadLabel()</small>
+                            <button type="button"
+                                    class="bucket-edit-dialog__submit"
+                                    disabled="@(_isEditUploading || _editPendingFiles.Count == 0)"
+                                    @onclick="UploadEditMediaAsync">
+                                @(_isEditUploading
+                                    ? "Lädt hoch..."
+                                    : "Hochladen")
+                            </button>
+                            @if (_isEditUploading && _editUploadProgress is not null && _editUploadProgress.Total > 0)
+                            {
+                                <small class="bucket-upload-progress">@($"{_editUploadProgress.Processed}/{_editUploadProgress.Total} Dateien hochgeladen")</small>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="bucket-edit-dialog__section bucket-edit-dialog__section--danger col-6 d-flex align-items-center flex-column">
+                        <button type="button"
+                                class="bucket-edit-dialog__delete"
+                                @onclick="OpenDeleteConfirm">
+                            Eintrag löschen
+                        </button>
+                    </div>
+                </div>
+                
+                @if (!string.IsNullOrWhiteSpace(_editDialogMessage))
+                {
+                    <p class="bucket-edit-dialog__message w-100 text-center">@_editDialogMessage</p>
+                }
+            }
+        </div>
+    </div>
+}
+
+@if (_showDeleteConfirm && _editingEntry is not null)
+{
+    <div class="bucket-confirm-dialog" role="dialog" aria-modal="true" @onclick="CloseDeleteConfirm">
+        <div class="bucket-confirm-dialog__content" @onclick:stopPropagation="true">
+            <header class="bucket-confirm-dialog__header">
+                <h4>Eintrag löschen?</h4>
+                <button type="button" class="bucket-confirm-dialog__close" aria-label="Dialog schließen" @onclick="CloseDeleteConfirm">✕</button>
+            </header>
+            <p class="bucket-confirm-dialog__text">
+                Bitte gib das Masterpasswort ein, um <strong>@_editingEntry.Title</strong> dauerhaft zu löschen. Alle Medien dieses Eintrags werden entfernt.
+            </p>
+            <label class="bucket-edit-dialog__password">
+                <span>Masterpasswort</span>
+                <div class="password-input">
+                    <InputText class="bucket-edit-dialog__password-input w-100"
+                               type="@(_showDeleteConfirmPassword ? "text" : "password")"
+                               @bind-Value="_deleteConfirmPassword"
+                               placeholder="Masterpasswort eingeben" />
+                    <button type="button"
+                            class="input-eye-btn @(_showDeleteConfirmPassword ? "is-visible" : "is-hidden")"
+                            aria-label="Passwort anzeigen oder verstecken"
+                            @onclick="ToggleDeleteConfirmPasswordVisibility">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M12 4.5c-5 0-9.27 3.11-11 7.5 1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Zm0 12a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9Zm0-2a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+                            <path d="m4 4 16 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                        </svg>
+                    </button>
+                </div>
+            </label>
+            @if (!string.IsNullOrWhiteSpace(_deleteDialogMessage))
+            {
+                <p class="bucket-confirm-dialog__message">@_deleteDialogMessage</p>
+            }
+            <div class="bucket-confirm-dialog__actions">
+                <button type="button"
+                        class="bucket-confirm-dialog__cancel"
+                        @onclick="CloseDeleteConfirm">
+                    Abbrechen
+                </button>
+                <button type="button"
+                        class="bucket-confirm-dialog__confirm"
+                        disabled="@_isDeletingEntry"
+                        @onclick="ConfirmDeleteAsync">
+                    @(_isDeletingEntry ? "Löscht..." : "Endgültig löschen")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private const long MaxMediaBytes = 50 * 1024 * 1024;
+    private const int MaxUploadsPerEntry = 50;
+    private const double PhotoSwipeThreshold = 45;
+
+    private readonly List<BucketListEntryViewModel> _entries = [];
+    private readonly HashSet<Guid> _completingEntries = [];
+    private readonly Dictionary<Guid, List<PendingMedia>> _pendingMedia = new();
+    private readonly List<PendingMedia> _editPendingFiles = new();
+    private readonly HashSet<Guid> _removingMediaIds = new();
+    private readonly Dictionary<Guid, UploadProgressState> _uploadProgress = new();
+    private UploadProgressState? _editUploadProgress;
+
+    private readonly CreateBucketEntryForm _newEntry = new();
+
+    private bool _isLoading;
+    private bool _isSaving;
+    private string? _statusMessage;
+    private bool _shouldFocusOverlay;
+    private double? _overlayPointerStartX;
+    private double? _overlayPointerStartY;
+    private ElementReference _overlayContentRef;
+    private bool _isAddingOverlayMedia;
+    private string? _overlayActionMessage;
+    private BucketMediaOverlay? _activeMedia;
+    private BucketListEntryViewModel? _editingEntry;
+    private bool _isEditUploading;
+    private string? _editDialogMessage;
+    private string _masterPasswordInput = string.Empty;
+    private string _deletePasswordInput = string.Empty;
+    private string _deleteConfirmPassword = string.Empty;
+    private string? _deleteDialogMessage;
+    private bool _isMasterPasswordValidated;
+    private bool _isVerifyingPassword;
+    private bool _showMasterPassword;
+    private bool _showDeletePassword;
+    private bool _showDeleteConfirm;
+    private bool _showDeleteConfirmPassword;
+    private bool _isDeletingEntry;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEntriesAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_shouldFocusOverlay && _activeMedia is not null)
+        {
+            _shouldFocusOverlay = false;
+            await _overlayContentRef.FocusAsync();
+        }
+    }
+
+    private async Task LoadEntriesAsync()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        try
+        {
+            _entries.Clear();
+            var entries = await BucketListService.GetEntriesAsync();
+            _entries.AddRange(entries.Select(CreateEntryViewModel));
+            SortEntries();
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OpenMedia(BucketListEntryViewModel entry, BucketMediaViewModel media)
+    {
+        if (string.IsNullOrWhiteSpace(media.Url))
+        {
+            return;
+        }
+
+        var mediaIndex = entry.Media.FindIndex(m => m.Id == media.Id);
+        if (mediaIndex >= 0)
+        {
+            entry.CurrentMediaIndex = mediaIndex;
+        }
+
+        _activeMedia = new BucketMediaOverlay
+        {
+            EntryId = entry.Id,
+            MediaId = media.Id,
+            Url = media.Url,
+            Title = entry.Title,
+            IsVideo = media.IsVideo,
+            CanAddToGallery = !media.IsVideo && !media.IsInGallery
+        };
+
+        _overlayActionMessage = null;
+        _shouldFocusOverlay = true;
+    }
+
+    private void CloseMedia()
+    {
+        _activeMedia = null;
+        _overlayActionMessage = null;
+        _isAddingOverlayMedia = false;
+        _shouldFocusOverlay = false;
+        _overlayPointerStartX = null;
+        _overlayPointerStartY = null;
+    }
+
+    private void HandleOverlayKey(KeyboardEventArgs args)
+    {
+        switch (args.Key)
+        {
+            case "Escape":
+                CloseMedia();
+                break;
+            case "ArrowRight":
+                ShowOverlayNextMedia();
+                break;
+            case "ArrowLeft":
+                ShowOverlayPreviousMedia();
+                break;
+        }
+    }
+
+    private void HandleOverlayPointerDown(PointerEventArgs args)
+    {
+        if (!string.Equals(args.PointerType, "touch", StringComparison.OrdinalIgnoreCase))
+        {
+            _overlayPointerStartX = null;
+            _overlayPointerStartY = null;
+            return;
+        }
+
+        _overlayPointerStartX = args.ClientX;
+        _overlayPointerStartY = args.ClientY;
+    }
+
+    private void HandleOverlayPointerUp(PointerEventArgs args)
+    {
+        if (!string.Equals(args.PointerType, "touch", StringComparison.OrdinalIgnoreCase)
+            || _overlayPointerStartX is null
+            || _overlayPointerStartY is null)
+        {
+            return;
+        }
+
+        var deltaX = args.ClientX - _overlayPointerStartX.Value;
+        var deltaY = args.ClientY - _overlayPointerStartY.Value;
+        if (Math.Abs(deltaX) >= PhotoSwipeThreshold || Math.Abs(deltaY) >= PhotoSwipeThreshold)
+        {
+            CloseMedia();
+        }
+
+        HandleOverlayPointerCancel(null);
+    }
+
+    private void HandleOverlayPointerCancel(PointerEventArgs? args)
+    {
+        _overlayPointerStartX = null;
+        _overlayPointerStartY = null;
+    }
+
+    private void OpenEditDialog(BucketListEntryViewModel entry)
+    {
+        _editingEntry = entry;
+        entry.MediaExpanded = true;
+        _editPendingFiles.Clear();
+        _editDialogMessage = null;
+        _isMasterPasswordValidated = false;
+        _isVerifyingPassword = false;
+        _masterPasswordInput = string.Empty;
+        _deletePasswordInput = string.Empty;
+        _deleteConfirmPassword = string.Empty;
+        _showMasterPassword = false;
+        _showDeletePassword = false;
+        _showDeleteConfirm = false;
+        _showDeleteConfirmPassword = false;
+        _isDeletingEntry = false;
+        _deleteDialogMessage = null;
+        _editUploadProgress = null;
+    }
+
+    private void CloseEditDialog()
+    {
+        _editingEntry = null;
+        _editPendingFiles.Clear();
+        _editDialogMessage = null;
+        _isMasterPasswordValidated = false;
+        _isVerifyingPassword = false;
+        _masterPasswordInput = string.Empty;
+        _deletePasswordInput = string.Empty;
+        _deleteConfirmPassword = string.Empty;
+        _showMasterPassword = false;
+        _showDeletePassword = false;
+        _showDeleteConfirm = false;
+        _showDeleteConfirmPassword = false;
+        _isDeletingEntry = false;
+        _deleteDialogMessage = null;
+        _editUploadProgress = null;
+    }
+
+    private async Task AddActiveMediaToGalleryAsync()
+    {
+        if (_activeMedia is null || !_activeMedia.CanAddToGallery || _isAddingOverlayMedia)
+        {
+            return;
+        }
+
+        _isAddingOverlayMedia = true;
+        _overlayActionMessage = "Wird zur Galerie hinzugefügt...";
+        StateHasChanged();
+
+        try
+        {
+            var result = await BucketListService.AddMediaToGalleryAsync(_activeMedia.EntryId, _activeMedia.MediaId);
+            if (result.Success)
+            {
+                _overlayActionMessage = "In die Galerie übernommen!";
+                _activeMedia.CanAddToGallery = false;
+                var entry = _entries.FirstOrDefault(e => e.Id == _activeMedia.EntryId);
+                var mediaVm = entry?.Media.FirstOrDefault(m => m.Id == _activeMedia.MediaId);
+                if (mediaVm is not null)
+                {
+                    mediaVm.IsInGallery = true;
+                }
+            }
+            else
+            {
+                _overlayActionMessage = string.IsNullOrWhiteSpace(result.Error)
+                    ? "Konnte nicht gespeichert werden."
+                    : result.Error;
+            }
+        }
+        finally
+        {
+            _isAddingOverlayMedia = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleBucketSubmitAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newEntry.Title))
+        {
+            _statusMessage = "Bitte gib einen Titel ein.";
+            return;
+        }
+
+        _isSaving = true;
+        _statusMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await BucketListService.CreateEntryAsync(_newEntry.Title.Trim(), _newEntry.RequiresPhoto);
+            if (result.Success && result.Value is not null)
+            {
+                _statusMessage = "Gespeichert!";
+                _newEntry.Reset();
+                ApplyEntryUpdate(result.Value);
+            }
+            else
+            {
+                _statusMessage = result.Error ?? "Konnte nicht gespeichert werden.";
+            }
+        }
+        finally
+        {
+            _isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private Task HandleMediaSelectedAsync(Guid entryId, InputFileChangeEventArgs args)
+    {
+        var selectedFiles = args.GetMultipleFiles(MaxUploadsPerEntry);
+        if (selectedFiles.Count == 0)
+        {
+            StateHasChanged();
+            return Task.CompletedTask;
+        }
+
+        var pendingFiles = _pendingMedia.TryGetValue(entryId, out var existing)
+            ? new List<PendingMedia>(existing)
+            : new List<PendingMedia>();
+
+        var errorMessage = (string?)null;
+
+        foreach (var file in selectedFiles)
+        {
+            if (file.Size > MaxMediaBytes)
+            {
+                errorMessage = "Bitte wähle Dateien unter 50 MB.";
+                break;
+            }
+
+            if (pendingFiles.Count >= MaxUploadsPerEntry)
+            {
+                errorMessage = $"Maximal {MaxUploadsPerEntry} Dateien pro Eintrag.";
+                break;
+            }
+
+            pendingFiles.Add(new PendingMedia
+            {
+                File = file
+            });
+        }
+
+        if (errorMessage is not null)
+        {
+            _statusMessage = errorMessage;
+            StateHasChanged();
+            return Task.CompletedTask;
+        }
+
+        _pendingMedia[entryId] = pendingFiles;
+        _statusMessage = null;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task HandleEditFilesSelected(InputFileChangeEventArgs args)
+    {
+        var files = args.GetMultipleFiles(MaxUploadsPerEntry);
+        if (files.Count == 0)
+        {
+            StateHasChanged();
+            return Task.CompletedTask;
+        }
+
+        var pending = new List<PendingMedia>(_editPendingFiles);
+
+        var errorMessage = (string?)null;
+
+        foreach (var file in files)
+        {
+            if (file.Size > MaxMediaBytes)
+            {
+                errorMessage = "Bitte wähle Dateien unter 50 MB.";
+                break;
+            }
+
+            if (pending.Count >= MaxUploadsPerEntry)
+            {
+                errorMessage = $"Maximal {MaxUploadsPerEntry} Dateien pro Eintrag.";
+                break;
+            }
+
+            pending.Add(new PendingMedia
+            {
+                File = file
+            });
+        }
+
+        if (errorMessage is not null)
+        {
+            _editDialogMessage = errorMessage;
+            StateHasChanged();
+            return Task.CompletedTask;
+        }
+
+        _editPendingFiles.Clear();
+        _editPendingFiles.AddRange(pending);
+        _editDialogMessage = null;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private string GetMediaLabel(Guid entryId)
+    {
+        if (_pendingMedia.TryGetValue(entryId, out var files) && files.Count > 0)
+        {
+            if (files.Count == 1)
+            {
+                return files[0].FileName;
+            }
+
+            return $"{files.Count} Dateien ausgewählt";
+        }
+
+        return "Noch keine Dateien gewählt";
+    }
+
+    private string GetEditUploadLabel()
+    {
+        if (_editPendingFiles.Count == 0)
+        {
+            return "";
+        }
+
+        if (_editPendingFiles.Count == 1)
+        {
+            return _editPendingFiles[0].FileName;
+        }
+
+        return $"{_editPendingFiles.Count} Dateien ausgewählt";
+    }
+
+    private void ShowNextMedia(BucketListEntryViewModel entry)
+    {
+        if (entry.Media.Count == 0)
+        {
+            return;
+        }
+
+        entry.CurrentMediaIndex = (entry.CurrentMediaIndex + 1) % entry.Media.Count;
+        StateHasChanged();
+    }
+
+    private void ShowPreviousMedia(BucketListEntryViewModel entry)
+    {
+        if (entry.Media.Count == 0)
+        {
+            return;
+        }
+
+        entry.CurrentMediaIndex = (entry.CurrentMediaIndex - 1 + entry.Media.Count) % entry.Media.Count;
+        StateHasChanged();
+    }
+
+    private void OpenCurrentMedia(BucketListEntryViewModel entry)
+    {
+        if (entry.Media.Count == 0)
+        {
+            return;
+        }
+
+        if (entry.CurrentMediaIndex < 0 || entry.CurrentMediaIndex >= entry.Media.Count)
+        {
+            entry.CurrentMediaIndex = 0;
+        }
+
+        var media = entry.Media[entry.CurrentMediaIndex];
+        OpenMedia(entry, media);
+    }
+
+    private void ShowOverlayNextMedia() => ShowOverlayMedia(1);
+
+    private void ShowOverlayPreviousMedia() => ShowOverlayMedia(-1);
+
+    private void ShowOverlayMedia(int direction)
+    {
+        if (!TryGetOverlayContext(out var entry, out var currentIndex))
+        {
+            return;
+        }
+
+        var targetEntry = entry!;
+        var nextIndex = (currentIndex + direction + targetEntry.Media.Count) % targetEntry.Media.Count;
+        var media = targetEntry.Media[nextIndex];
+        targetEntry.CurrentMediaIndex = nextIndex;
+
+        _activeMedia = new BucketMediaOverlay
+        {
+            EntryId = targetEntry.Id,
+            MediaId = media.Id,
+            Url = media.Url,
+            Title = targetEntry.Title,
+            IsVideo = media.IsVideo,
+            CanAddToGallery = !media.IsVideo && !media.IsInGallery
+        };
+
+        _overlayActionMessage = null;
+        _isAddingOverlayMedia = false;
+        StateHasChanged();
+    }
+
+    private string GetMediaCounter(BucketListEntryViewModel entry)
+    {
+        if (entry.Media.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        return $"{entry.CurrentMediaIndex + 1} / {entry.Media.Count}";
+    }
+
+    private void ToggleMediaSection(BucketListEntryViewModel entry)
+    {
+        entry.MediaExpanded = !entry.MediaExpanded;
+    }
+
+    private bool EnsureMasterPasswordProvided()
+    {
+        if (_isMasterPasswordValidated)
+        {
+            return true;
+        }
+
+        _editDialogMessage = "Bitte gib das Masterpasswort ein und klicke auf Freischalten.";
+        StateHasChanged();
+        return false;
+    }
+
+    private async Task VerifyMasterPasswordAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_masterPasswordInput))
+        {
+            _editDialogMessage = "Bitte gib zuerst das Masterpasswort ein.";
+            StateHasChanged();
+            return;
+        }
+
+        _isVerifyingPassword = true;
+        _editDialogMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await BucketListService.VerifyMasterPasswordAsync(_masterPasswordInput);
+            if (result.Success)
+            {
+                _isMasterPasswordValidated = true;
+                _editDialogMessage = "Passwort akzeptiert.";
+            }
+            else
+            {
+                _isMasterPasswordValidated = false;
+                _editDialogMessage = result.Error ?? "Masterpasswort ist ungültig.";
+            }
+        }
+        finally
+        {
+            _isVerifyingPassword = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleMasterPasswordVisibility() => _showMasterPassword = !_showMasterPassword;
+
+    private void ToggleDeletePasswordVisibility() => _showDeletePassword = !_showDeletePassword;
+
+    private void OpenDeleteConfirm()
+    {
+        _deleteConfirmPassword = string.Empty;
+        _deleteDialogMessage = null;
+        _showDeleteConfirmPassword = false;
+        _showDeleteConfirm = true;
+    }
+
+    private void CloseDeleteConfirm()
+    {
+        _showDeleteConfirm = false;
+        _deleteConfirmPassword = string.Empty;
+        _deleteDialogMessage = null;
+        _showDeleteConfirmPassword = false;
+    }
+
+    private void ToggleDeleteConfirmPasswordVisibility() => _showDeleteConfirmPassword = !_showDeleteConfirmPassword;
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_editingEntry is null || _isDeletingEntry)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_deleteConfirmPassword))
+        {
+            _deleteDialogMessage = "Bitte gib das Masterpasswort ein.";
+            StateHasChanged();
+            return;
+        }
+
+        _isDeletingEntry = true;
+        _deleteDialogMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await BucketListService.DeleteEntryAsync(_editingEntry.Id, _deleteConfirmPassword);
+            if (result.Success)
+            {
+                _entries.RemoveAll(e => e.Id == _editingEntry.Id);
+                _statusMessage = "Eintrag gelöscht.";
+                CloseDeleteConfirm();
+                CloseEditDialog();
+            }
+            else
+            {
+                _deleteDialogMessage = result.Error ?? "Eintrag konnte nicht gelöscht werden.";
+            }
+        }
+        finally
+        {
+            _isDeletingEntry = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task UploadEditMediaAsync()
+    {
+        if (_editingEntry is null)
+        {
+            return;
+        }
+
+        if (_editPendingFiles.Count == 0)
+        {
+            _editDialogMessage = "Bitte wähle zuerst Dateien aus.";
+            StateHasChanged();
+            return;
+        }
+
+        if (!EnsureMasterPasswordProvided())
+        {
+            return;
+        }
+
+        _isEditUploading = true;
+        _editDialogMessage = null;
+        _editUploadProgress = new UploadProgressState { Total = _editPendingFiles.Count, Processed = 0 };
+        StateHasChanged();
+
+        try
+        {
+            var uploadFiles = ConvertPendingMedia(_editPendingFiles);
+            var progress = new Progress<int>(count =>
+            {
+                if (_editUploadProgress is not null)
+                {
+                    _editUploadProgress.Processed = count;
+                }
+                InvokeAsync(StateHasChanged);
+            });
+
+            var result = await BucketListService.UploadAdditionalMediaAsync(_editingEntry.Id, uploadFiles, _masterPasswordInput, progress);
+            if (result.Success && result.Value is not null)
+            {
+                ApplyEntryUpdate(result.Value);
+                _editDialogMessage = "Neue Dateien hinzugefügt!";
+                _editPendingFiles.Clear();
+                _editUploadProgress = null;
+            }
+            else
+            {
+                _editDialogMessage = result.Error ?? "Fehler beim Hochladen.";
+            }
+        }
+        finally
+        {
+            _isEditUploading = false;
+            _editUploadProgress = null;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemoveMediaFromEntryAsync(BucketMediaViewModel media)
+    {
+        if (_editingEntry is null || _removingMediaIds.Contains(media.Id))
+        {
+            return;
+        }
+
+        if (!EnsureMasterPasswordProvided())
+        {
+            return;
+        }
+
+        _removingMediaIds.Add(media.Id);
+        StateHasChanged();
+
+        try
+        {
+            var result = await BucketListService.RemoveMediaAsync(_editingEntry.Id, media.Id, _masterPasswordInput);
+            if (result.Success && result.Value is not null)
+            {
+                ApplyEntryUpdate(result.Value);
+                _editDialogMessage = "Medium entfernt.";
+            }
+            else
+            {
+                _editDialogMessage = result.Error ?? "Medium konnte nicht entfernt werden.";
+            }
+        }
+        finally
+        {
+            _removingMediaIds.Remove(media.Id);
+            StateHasChanged();
+        }
+    }
+
+    private async Task CompleteEntryAsync(BucketListEntryViewModel entry)
+    {
+        if (_completingEntries.Contains(entry.Id))
+        {
+            return;
+        }
+
+        if (entry.RequiresPhoto && (!_pendingMedia.TryGetValue(entry.Id, out var files) || files.Count == 0))
+        {
+            _statusMessage = "Bitte lade zuerst mindestens eine Datei hoch.";
+            StateHasChanged();
+            return;
+        }
+
+        _completingEntries.Add(entry.Id);
+        _pendingMedia.TryGetValue(entry.Id, out var pendingFiles);
+        var totalUploads = pendingFiles?.Count ?? 0;
+        var progressState = new UploadProgressState { Total = totalUploads, Processed = 0 };
+        _uploadProgress[entry.Id] = progressState;
+        StateHasChanged();
+
+        try
+        {
+            var mediaFiles = pendingFiles is not null ? ConvertPendingMedia(pendingFiles) : [];
+
+            var progress = new Progress<int>(count =>
+            {
+                progressState.Processed = count;
+                InvokeAsync(StateHasChanged);
+            });
+
+            var result = await BucketListService.CompleteEntryAsync(entry.Id, mediaFiles, progress);
+            if (result.Success && result.Value is not null)
+            {
+                _statusMessage = "Yay! Wieder ein Punkt weniger.";
+                _pendingMedia.Remove(entry.Id);
+                ApplyEntryUpdate(result.Value);
+            }
+            else
+            {
+                _statusMessage = result.Error ?? "Konnte nicht gespeichert werden.";
+            }
+        }
+        finally
+        {
+            _completingEntries.Remove(entry.Id);
+            _uploadProgress.Remove(entry.Id);
+            StateHasChanged();
+        }
+    }
+
+    private List<UploadedMediaFile> ConvertPendingMedia(IEnumerable<PendingMedia> pendingFiles)
+    {
+        return pendingFiles
+            .Select(file => new UploadedMediaFile(
+                file.FileName,
+                file.ContentType,
+                file.Length,
+                ct => Task.FromResult<Stream>(file.File.OpenReadStream(MaxMediaBytes, ct))))
+            .ToList();
+    }
+
+    private void ApplyEntryUpdate(BucketListEntryDto dto)
+    {
+        var newEntry = CreateEntryViewModel(dto);
+        var existingIndex = _entries.FindIndex(e => e.Id == dto.Id);
+
+        if (existingIndex >= 0)
+        {
+            var previous = _entries[existingIndex];
+            if (newEntry.Media.Count > 0)
+            {
+                newEntry.CurrentMediaIndex = Math.Min(previous.CurrentMediaIndex, newEntry.Media.Count - 1);
+            }
+            newEntry.MediaExpanded = previous.MediaExpanded;
+            _entries[existingIndex] = newEntry;
+        }
+        else
+        {
+            _entries.Add(newEntry);
+        }
+
+        SortEntries();
+
+        if (_editingEntry?.Id == newEntry.Id)
+        {
+            newEntry.MediaExpanded = true;
+            _editingEntry = newEntry;
+        }
+    }
+
+    private void SortEntries()
+    {
+        _entries.Sort((left, right) =>
+        {
+            var completionCompare = left.Completed.CompareTo(right.Completed);
+            if (completionCompare != 0)
+            {
+                return completionCompare;
+            }
+
+            return DateTime.Compare(left.CreatedAt, right.CreatedAt);
+        });
+    }
+
+    private bool TryGetOverlayContext(out BucketListEntryViewModel? entry, out int currentIndex)
+    {
+        entry = null;
+        currentIndex = -1;
+
+        if (_activeMedia is null)
+        {
+            return false;
+        }
+
+        entry = _entries.FirstOrDefault(e => e.Id == _activeMedia.EntryId);
+        if (entry is null || entry.Media.Count == 0)
+        {
+            return false;
+        }
+
+        currentIndex = entry.Media.FindIndex(m => m.Id == _activeMedia.MediaId);
+        if (currentIndex < 0)
+        {
+            currentIndex = 0;
+        }
+
+        return true;
+    }
+
+    private static BucketListEntryViewModel CreateEntryViewModel(BucketListEntryDto dto)
+    {
+        return new BucketListEntryViewModel
+        {
+            Id = dto.Id,
+            Title = dto.Title,
+            RequiresPhoto = dto.RequiresPhoto,
+            Completed = dto.Completed,
+            CompletedAt = dto.CompletedAt,
+            CreatedAt = dto.CreatedAt,
+            Media = (dto.Media ?? Array.Empty<BucketListMediaDto>())
+                .Select(media => new BucketMediaViewModel
+                {
+                    Id = media.Id,
+                    Url = media.Url,
+                    ThumbnailUrl = media.ThumbnailUrl,
+                    IsVideo = media.IsVideo,
+                    OriginalFileName = media.OriginalFileName,
+                    IsInGallery = media.IsInGallery
+                })
+                .ToList(),
+            CurrentMediaIndex = 0,
+            MediaExpanded = false
+        };
+    }
+
+    private sealed class CreateBucketEntryForm
+    {
+        [Required(ErrorMessage = "Titel darf nicht leer sein.")]
+        [StringLength(160, ErrorMessage = "Titel ist zu lang (max. 160 Zeichen).")]
+        public string Title { get; set; } = string.Empty;
+
+        public bool RequiresPhoto { get; set; }
+
+        public void Reset()
+        {
+            Title = string.Empty;
+            RequiresPhoto = false;
+        }
+    }
+
+    private sealed class BucketListEntryViewModel
+    {
+        public required Guid Id { get; init; }
+        public required string Title { get; init; }
+        public bool RequiresPhoto { get; init; }
+        public bool Completed { get; init; }
+        public DateTime? CompletedAt { get; init; }
+        public DateTime CreatedAt { get; init; }
+        public List<BucketMediaViewModel> Media { get; init; } = [];
+        public int CurrentMediaIndex { get; set; }
+        public bool MediaExpanded { get; set; }
+    }
+
+    private sealed class BucketMediaViewModel
+    {
+        public required Guid Id { get; init; }
+        public required string Url { get; init; }
+        public string? ThumbnailUrl { get; init; }
+        public bool IsVideo { get; init; }
+        public string? OriginalFileName { get; init; }
+        public bool IsInGallery { get; set; }
+    }
+
+    private sealed class PendingMedia
+    {
+        public required IBrowserFile File { get; init; }
+        public string FileName => File.Name;
+        public string ContentType => string.IsNullOrWhiteSpace(File.ContentType) ? "application/octet-stream" : File.ContentType;
+        public long Length => File.Size;
+    }
+
+    private sealed class BucketMediaOverlay
+    {
+        public required Guid EntryId { get; init; }
+        public required Guid MediaId { get; init; }
+        public required string Url { get; init; }
+        public required string Title { get; init; }
+        public bool IsVideo { get; init; }
+        public bool CanAddToGallery { get; set; }
+    }
+
+    private sealed class UploadProgressState
+    {
+        public int Total { get; set; }
+        public int Processed { get; set; }
+    }
+}

@@ -1,0 +1,1167 @@
+﻿@page "/config"
+@using System.Text
+@using System.Linq
+@inject LoveConfig Content
+@inject IJSRuntime Js
+@inject IHeroImageService HeroImageService
+@implements IAsyncDisposable
+
+<PageTitle>Konfiguration</PageTitle>
+
+<div class="config-page">
+    <header class="config-page__header">
+        <p class="section-eyebrow">Einstellungen</p>
+        <h1>Konfiguration per Umgebungsvariablen</h1>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <div class="config-page__alert config-page__alert--error" role="alert">@_errorMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(_successMessage))
+    {
+        <div class="config-page__alert config-page__alert--success" role="status">@_successMessage</div>
+    }
+
+    <EditForm Model="_model" OnValidSubmit="HandleSaveAsync">
+        <div class="config-actions">
+            <button class="config-actions__btn" type="submit">love.env herunterladen</button>
+        </div>
+
+        <section class="config-section">
+            <div class="config-section__header">
+                <h2>Hero / Intro</h2>
+                <p>Texte der Startsektion und ein hochgeladenes Hero-Bild (nicht in der .env).</p>
+            </div>
+            <div class="config-grid row d-flex justify-content-center">
+                <div class="config-field form-group col-3">
+                    <label>Seitentitel <span class="env-pill">@LoveConfigLoader.Keys.HeroTitle</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.HeroTitle" />
+                </div>
+                <div class="config-field form-group  col-3">
+                    <label>Untertitel <span class="env-pill">@LoveConfigLoader.Keys.HeroSubtitle</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.HeroSubtitle" />
+                </div>
+                <div class="config-field form-group  col-3">
+                    <label>Intro <span class="env-pill">@LoveConfigLoader.Keys.HeroIntro</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.HeroIntro" />
+                </div>
+                <div class="config-field form-group  col-3">
+                    <label>CTA Label <span class="env-pill">@LoveConfigLoader.Keys.HeroCta</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.HeroCta" />
+                </div>
+                <div class="config-field form-group  col-3">
+                    <label>CTA Label (nach Klick) <span class="env-pill">@LoveConfigLoader.Keys.HeroCtaAfter</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.HeroCtaAfter" />
+                </div>
+                <div class="config-field form-group col-6">
+                    <label>Hero Bild (Upload)</label>
+                    <div class="hero-upload">
+                        @if (!string.IsNullOrWhiteSpace(_heroImage?.Src))
+                        {
+                            <img class="hero-upload__preview" src="@_heroImage.Src" alt="Aktuelles Hero Bild" />
+                        }
+                        else
+                        {
+                            <div class="hero-upload__placeholder">Kein Bild hochgeladen</div>
+                        }
+                        <div class="hero-upload__actions">
+                            <InputFile OnChange="HandleHeroUpload" accept="image/png,image/jpeg,image/webp" />
+                            <small class="config-hint">Bild wird in <code>wwwroot/uploads/hero</code> gespeichert, nicht in der .env.</small>
+                            @if (!string.IsNullOrEmpty(_heroUploadError))
+                            {
+                                <p class="config-page__alert config-page__alert--error">@_heroUploadError</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="config-field form-group col-6">
+                    <label>Hero Bild Untertitel</label>
+                    <InputText class="config-input form-control" @bind-Value="_heroCaption" />
+                </div>
+            </div>
+        </section>
+
+        <section class="config-section">
+            <div class="config-section__header">
+                <h2>Beziehung</h2>
+                <p>Datumsangaben und Texte fÜr den Zeitstrahl.</p>
+            </div>
+            <div class="config-grid row d-flex justify-content-center">
+                <div class="config-field form-group col-3">
+                    <label>Startdatum (yyyy-MM-dd) <span class="env-pill">@LoveConfigLoader.Keys.RelationshipStartDate</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.RelationshipStartDate" />
+                </div>
+                <div class="config-field form-group col-3">
+                    <label>Heading <span class="env-pill">@LoveConfigLoader.Keys.RelationshipHeading</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.RelationshipHeading" />
+                </div>
+                <div class="config-field form-group col-3">
+                    <label>Subheading <span class="env-pill">@LoveConfigLoader.Keys.RelationshipSubheading</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.RelationshipSubheading" />
+                </div>
+                <div class="config-field form-group col-3">
+                    <label>Zukunft Titel <span class="env-pill">@LoveConfigLoader.Keys.RelationshipFutureTitle</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.RelationshipFutureTitle" />
+                </div>
+                <div class="config-field form-group col-3">
+                    <label>Zukunft Text <span class="env-pill">@LoveConfigLoader.Keys.RelationshipFutureText</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.RelationshipFutureText" />
+                </div>
+                <div class="config-field form-group col-3">
+                    <label>Glücksrad anzeigen? <span class="env-pill">@LoveConfigLoader.Keys.RelationshipShowWheel</span></label>
+                    <InputSelect class="config-input form-control" @bind-Value="_model.RelationshipShowWheel">
+                        <option value="">Standard (leer)</option>
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                    </InputSelect>
+                </div>
+            </div>
+
+            <div class="list-actions mt-5">
+                <button type="button" class="config-actions__btn config-actions__btn--ghost" @onclick="AddWheelItem">Glücksradseintrag hinzufuegen</button>
+            </div>
+
+            <div class="simple-list">
+                @if (!_wheelItems.Any())
+                {
+                    <p class="config-hint">Noch keine Einträge.</p>
+                }
+                else
+                {
+                    @for (var i = 0; i < _wheelItems.Count; i++)
+                    {
+                        <div class="simple-list__row">
+                            <InputText class="config-input form-control" @bind-Value="_wheelItems[i]" />
+                            <button type="button" class="simple-list__remove" @onclick="() => RemoveWheelItem(i)">X</button>
+                        </div>
+                    }
+                }
+            </div>
+        </section>
+
+        <section class="config-section">
+            <div class="config-section__header">
+                <h2>Liebesbrief</h2>
+                <p>Heading und Absaetze.</p>
+            </div>
+            <div class="config-grid">
+                <div class="config-field form-group ">
+                    <label>Überschrift <span class="env-pill">@LoveConfigLoader.Keys.LoveLetterHeading</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.LoveLetterHeading" />
+                </div>
+            </div>
+            <div class="simple-list">
+                <div class="simple-list__column">
+                    <label>Text</label>
+                    <InputTextArea class="config-textarea" rows="12" spellcheck="false" @bind-Value="_letterText" />
+                </div>
+            </div>
+        </section>
+
+        <section class="config-section">
+            <div class="config-section__header">
+                <h2>Gate</h2>
+                <p>Fragen, Texte und Fehlermeldung.</p>
+            </div>
+            <div class="config-grid row d-flex justify-content-center">
+                <div class="config-field form-group col-3">
+                    <label>Titel <span class="env-pill">@LoveConfigLoader.Keys.GateTitle</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.GateTitle" />
+                </div>
+                <div class="config-field form-group col-3">
+                    <label>Untertitel <span class="env-pill">@LoveConfigLoader.Keys.GateSubtitle</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.GateSubtitle" />
+                </div>
+                <div class="config-field form-group col-3">
+                    <label>Fehlermeldung <span class="env-pill">@LoveConfigLoader.Keys.GateErrorMessage</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.GateErrorMessage" />
+                </div>
+            </div>
+
+            <div class="gate-actions mt-5">
+                <button type="button" class="config-actions__btn config-actions__btn--ghost" @onclick="AddGateQuestion">Frage hinzufuegen</button>
+            </div>
+
+            <div class="gate-list">
+                @if (!_gateQuestions.Any())
+                {
+                    <p class="config-hint">Noch keine Fragen hinterlegt.</p>
+                }
+                else
+                {
+                    @foreach (var (question, index) in _gateQuestions.Select((q, i) => (q, i)))
+                    {
+                        <article class="gate-card">
+                            <div class="gate-card__header">
+                                <h3>Frage @(index + 1)</h3>
+                                <button type="button"
+                                        class="gate-card__remove"
+                                        title="Frage entfernen"
+                                        @onclick="() => RemoveGateQuestion(question.Id)">
+                                    Entfernen
+                                </button>
+                            </div>
+                            <div class="config-grid">
+                                <div class="config-field form-group config-field form-group--wide">
+                                    <label>Fragetext</label>
+                                    <InputText class="config-input form-control" @bind-Value="_gateQuestions[index].Prompt" />
+                                </div>
+                                <div class="config-field form-group">
+                                    <label>Typ</label>
+                                    <InputSelect class="config-input form-control" @bind-Value="_gateQuestions[index].Type">
+                                        <option value="@GateQuestionType.MultipleChoice">MultipleChoice</option>
+                                        <option value="@GateQuestionType.Text">Text</option>
+                                    </InputSelect>
+                                </div>
+                                @if (question.Type == GateQuestionType.MultipleChoice)
+                                {
+                                    <div class="config-field form-group config-field form-group--wide">
+                                        <label>AntwortmÃ¶glichkeiten (eine pro Zeile)</label>
+                                        <InputTextArea class="config-textarea" rows="4" spellcheck="false" @bind-Value="_gateQuestions[index].ChoicesText" />
+                                    </div>
+                                    <div class="config-field form-group">
+                                        <label>AnswerIndex (0-basiert)</label>
+                                        <InputText class="config-input form-control" @bind-Value="_gateQuestions[index].AnswerIndex" />
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="config-field form-group config-field form-group--wide">
+                                        <label>Richtige Antwort</label>
+                                        <InputText class="config-input form-control" @bind-Value="_gateQuestions[index].AnswerText" />
+                                    </div>
+                                    <div class="form-check mt-2">
+                                        <InputCheckbox id="@($"checkbox-{index}")" class="form-check-input" @bind-Value="_gateQuestions[index].IsCaseSensitive" />
+                                        <label for="@($"checkbox-{index}")" class="form-check-label">Groß/Kleinschreibung beachten?</label>
+                                    </div>
+                                }
+                            </div>
+                        </article>
+                    }
+                }
+            </div>
+        </section>
+
+        <section class="config-section">
+            <div class="config-section__header">
+                <h2>Erinnerungen</h2>
+                <p>Timeline an/aus und Eintraege.</p>
+            </div>
+            <div class="config-grid">
+                <div class="config-field form-group">
+                    <label>Erinnerungen anzeigen? <span class="env-pill">@LoveConfigLoader.Keys.MemoriesVisible</span></label>
+                    <InputSelect class="config-input form-control" @bind-Value="_model.MemoriesVisible">
+                        <option value="">Standard (leer)</option>
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                    </InputSelect>
+                </div>
+            </div>
+            <div class="list-actions mt-5">
+                <button type="button" class="config-actions__btn config-actions__btn--ghost" @onclick="AddMemory">Erinnerung hinzufuegen</button>
+            </div>
+            <div class="card-list">
+                @if (!_memories.Any())
+                {
+                    <p class="config-hint">Noch keine Erinnerungen.</p>
+                }
+                else
+                {
+                    @foreach (var (memory, index) in _memories.Select((m, i) => (m, i)))
+                    {
+                        <article class="card-list__item">
+                            <div class="card-list__header">
+                                <h3>Eintrag @(index + 1)</h3>
+                                <button type="button" class="simple-list__remove" @onclick="() => RemoveMemory(memory.Id)">Entfernen</button>
+                            </div>
+                            <div class="config-grid">
+                                <div class="config-field form-group">
+                                    <label>Titel</label>
+                                    <InputText class="config-input form-control" @bind-Value="_memories[index].Title" />
+                                </div>
+                                <div class="config-field form-group">
+                                    <label>Datum</label>
+                                    <InputText class="config-input form-control" @bind-Value="_memories[index].Date" />
+                                </div>
+                                <div class="config-field form-group">
+                                    <label>Icon</label>
+                                    <InputText class="config-input form-control" @bind-Value="_memories[index].Icon" />
+                                </div>
+                                <div class="config-field form-group config-field form-group--wide">
+                                    <label>Beschreibung</label>
+                                    <InputTextArea class="config-textarea" rows="3" spellcheck="false" @bind-Value="_memories[index].Description" />
+                                </div>
+                            </div>
+                        </article>
+                    }
+                }
+            </div>
+        </section>
+        <section class="config-section">
+            <div class="config-section__header">
+                <h2>Galerie & Highlights</h2>
+                <p>Favoriten-Limit setzen, Highlights verwalten. Galerie wird dynamisch gepflegt.</p>
+            </div>
+            <div class="config-grid">
+                <div class="config-field form-group">
+                    <label>Favoriten-Limit <span class="env-pill">@LoveConfigLoader.Keys.GalleryFavoriteLimit</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.GalleryFavoriteLimit" />
+                    <small class="config-hint">Standard: 6. Werte &gt; 0.</small>
+                </div>
+            </div>
+            <div class="list-actions mt-5">
+                <button type="button" class="config-actions__btn config-actions__btn--ghost" @onclick="AddHighlight">Highlight hinzufuegen</button>
+            </div>
+            <div class="card-list">
+                @if (!_highlights.Any())
+                {
+                    <p class="config-hint">Noch keine Highlights.</p>
+                }
+                else
+                {
+                    @foreach (var (highlight, index) in _highlights.Select((h, i) => (h, i)))
+                    {
+                        <article class="card-list__item">
+                            <div class="card-list__header">
+                                <h3>Highlight @(index + 1)</h3>
+                                <button type="button" class="simple-list__remove" @onclick="() => RemoveHighlight(highlight.Id)">Entfernen</button>
+                            </div>
+                            <div class="config-grid">
+                                <div class="config-field form-group">
+                                    <label>Icon</label>
+                                    <InputText class="config-input form-control" @bind-Value="_highlights[index].Icon" />
+                                </div>
+                                <div class="config-field form-group">
+                                    <label>Titel</label>
+                                    <InputText class="config-input form-control" @bind-Value="_highlights[index].Title" />
+                                </div>
+                                <div class="config-field form-group config-field form-group--wide">
+                                    <label>Beschreibung</label>
+                                    <InputTextArea class="config-textarea" rows="3" spellcheck="false" @bind-Value="_highlights[index].Description" />
+                                </div>
+                            </div>
+                        </article>
+                    }
+                }
+            </div>
+        </section>
+        <section class="config-section">
+            <div class="config-section__header">
+                <h2>Bucket List</h2>
+            </div>
+            <div class="config-grid row d-flex justify-content-center">
+                <div class="config-field form-group col-3">
+                    <label>Eyebrow <span class="env-pill">@LoveConfigLoader.Keys.BucketEyebrow</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.BucketEyebrow" />
+                </div>
+                <div class="config-field form-group col-3">
+                    <label>Ueberschrift <span class="env-pill">@LoveConfigLoader.Keys.BucketHeading</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.BucketHeading" />
+                </div>
+                <div class="config-field form-group col-3">
+                    <label>Subheading <span class="env-pill">@LoveConfigLoader.Keys.BucketSubheading</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.BucketSubheading" />
+                </div>
+            </div>
+        </section>
+
+        <section class="config-section">
+            <div class="config-section__header">
+                <h2>Songs</h2>
+                <p>Playlist Texte, Spotify Zugangsdaten und Eintraege.</p>
+            </div>
+            <div class="config-grid row d-flex row-gap-4 justify-content-center">
+                <div class="config-field form-group col-3">
+                    <label>Eyebrow <span class="env-pill">@LoveConfigLoader.Keys.SongsEyebrow</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.SongsEyebrow" />
+                </div>
+                <div class="config-field form-group col-3">
+                    <label>Überschrift <span class="env-pill">@LoveConfigLoader.Keys.SongsHeading</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.SongsHeading" />
+                </div>
+                <div class="config-field form-group col-3">
+                    <label>Subheading <span class="env-pill">@LoveConfigLoader.Keys.SongsSubheading</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.SongsSubheading" />
+                </div>
+                <div class="config-field form-group col-3">
+                    <label>Spotify ClientId <span class="env-pill">@LoveConfigLoader.Keys.SpotifyClientId</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.SpotifyClientId" />
+                </div>
+                <div class="config-field form-group col-3">
+                    <label>Spotify ClientSecret <span class="env-pill">@LoveConfigLoader.Keys.SpotifyClientSecret</span></label>
+                    <InputText class="config-input form-control" type="password" @bind-Value="_model.SpotifyClientSecret" />
+                </div>
+                <div class="config-field form-group col-3">
+                    <label>Spotify PlaylistId <span class="env-pill">@LoveConfigLoader.Keys.SpotifyPlaylistId</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.SpotifyPlaylistId" />
+                </div>
+            </div>
+
+            <div class="list-actions mt-5">
+                <button type="button" class="config-actions__btn config-actions__btn--ghost" @onclick="AddSong">Song hinzufuegen</button>
+            </div>
+            <div class="card-list">
+                @if (!_songs.Any())
+                {
+                    <p class="config-hint">Noch keine Songs.</p>
+                }
+                else
+                {
+                    @foreach (var (song, index) in _songs.Select((s, i) => (s, i)))
+                    {
+                        <article class="card-list__item">
+                            <div class="card-list__header">
+                                <h3>Song @(index + 1)</h3>
+                                <button type="button" class="simple-list__remove" @onclick="() => RemoveSong(song.Id)">Entfernen</button>
+                            </div>
+                            <div class="config-grid">
+                                <div class="config-field form-group">
+                                    <label>URL</label>
+                                    <InputText class="config-input form-control" @bind-Value="_songs[index].Url" />
+                                </div>
+                                <div class="config-field form-group">
+                                    <label>Artist</label>
+                                    <InputText class="config-input form-control" @bind-Value="_songs[index].Artist" />
+                                </div>
+                            </div>
+                        </article>
+                    }
+                }
+            </div>
+        </section>
+
+        <div class="config-actions config-actions--footer">
+            <button class="config-actions__btn" type="submit">love.env herunterladen</button>
+        </div>
+    </EditForm>
+</div>
+
+@code {
+    private EnvFormModel _model = new();
+    private List<GateQuestionForm> _gateQuestions = new();
+    private List<string> _wheelItems = new();
+    private string _letterText = string.Empty;
+    private List<MemoryForm> _memories = new();
+    private List<HighlightForm> _highlights = new();
+    private List<SongForm> _songs = new();
+    private string? _errorMessage;
+    private string? _successMessage;
+    private IJSObjectReference? _downloadModule;
+    private const string DownloadFileName = "love.env";
+    private HeroImageInfo _heroImage = new HeroImageInfo(string.Empty, null);
+    private string _heroCaption = string.Empty;
+    private string? _heroUploadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _heroImage = await HeroImageService.GetAsync();
+        _heroCaption = _heroImage.Caption ?? string.Empty;
+
+        _model = new EnvFormModel
+        {
+            HeroTitle = Content.Hero.Title,
+            HeroSubtitle = Content.Hero.Subtitle ?? string.Empty,
+            HeroIntro = Content.Hero.Intro,
+            HeroCta = Content.Hero.Cta,
+            HeroCtaAfter = Content.Hero.CtaAfter,
+
+            RelationshipStartDate = Content.Relationship.StartDate.ToString("yyyy-MM-dd"),
+            RelationshipHeading = Content.Relationship.Heading ?? string.Empty,
+            RelationshipSubheading = Content.Relationship.Subheading ?? string.Empty,
+            RelationshipFutureTitle = Content.Relationship.FutureTitle ?? string.Empty,
+            RelationshipFutureText = Content.Relationship.FutureText ?? string.Empty,
+            RelationshipShowWheel = Content.Relationship.ShowWheel.ToString().ToLowerInvariant(),
+
+            LoveLetterHeading = Content.LoveLetter.Heading,
+
+            GateTitle = Content.Gate.Title,
+            GateSubtitle = Content.Gate.Subtitle,
+            GateErrorMessage = Content.Gate.ErrorMessage,
+
+            MemoriesVisible = Content.MemoriesVisible.ToString().ToLowerInvariant(),
+            GalleryFavoriteLimit = Environment.GetEnvironmentVariable(LoveConfigLoader.Keys.GalleryFavoriteLimit) ?? "6",
+
+            BucketEyebrow = Content.BucketList.Eyebrow,
+            BucketHeading = Content.BucketList.Heading,
+            BucketSubheading = Content.BucketList.Subheading,
+
+            SongsEyebrow = Content.Songs.Eyebrow,
+            SongsHeading = Content.Songs.Heading,
+            SongsSubheading = Content.Songs.Subheading,
+            SpotifyClientId = Environment.GetEnvironmentVariable(LoveConfigLoader.Keys.SpotifyClientId) ?? Environment.GetEnvironmentVariable("ClientId") ?? string.Empty,
+            SpotifyClientSecret = Environment.GetEnvironmentVariable(LoveConfigLoader.Keys.SpotifyClientSecret) ?? Environment.GetEnvironmentVariable("ClientSecret") ?? string.Empty,
+            SpotifyPlaylistId = Environment.GetEnvironmentVariable(LoveConfigLoader.Keys.SpotifyPlaylistId) ?? Environment.GetEnvironmentVariable("PlayListId") ?? string.Empty
+        };
+
+        _gateQuestions = Content.Gate.Questions
+            .Select(q => new GateQuestionForm
+            {
+                Id = Guid.NewGuid(),
+                Prompt = q.Prompt,
+                Type = q.Type,
+                ChoicesText = q.Choices != null ? string.Join(Environment.NewLine, q.Choices) : string.Empty,
+                AnswerIndex = q.AnswerIndex?.ToString() ?? string.Empty,
+                AnswerText = q.AnswerText ?? string.Empty,
+                IsCaseSensitive = q.IsCaseSensitive
+            })
+            .ToList();
+
+        _wheelItems = (Content.Relationship.WheelItems ?? Array.Empty<string>()).ToList();
+        _letterText = string.Join(Environment.NewLine + Environment.NewLine, Content.LoveLetter.Paragraphs);
+        _memories = Content.Memories
+            .Select(m => new MemoryForm
+            {
+                Id = Guid.NewGuid(),
+                Title = m.Title,
+                Description = m.Description,
+                Date = m.Date,
+                Icon = m.Icon
+            })
+            .ToList();
+
+        _highlights = Content.Highlights
+            .Select(h => new HighlightForm
+            {
+                Id = Guid.NewGuid(),
+                Icon = h.Icon,
+                Title = h.Title,
+                Description = h.Description
+            })
+            .ToList();
+
+        _songs = Content.Songs.Items
+            .Select(s => new SongForm
+            {
+                Id = Guid.NewGuid(),
+                Url = s.Url,
+                Artist = s.Artist
+            })
+            .ToList();
+    }
+
+    private void AddGateQuestion()
+    {
+        _gateQuestions.Add(new GateQuestionForm
+        {
+            Id = Guid.NewGuid(),
+            Prompt = string.Empty,
+            Type = GateQuestionType.MultipleChoice,
+            ChoicesText = string.Empty,
+            AnswerIndex = "0",
+            AnswerText = string.Empty,
+            IsCaseSensitive = false
+        });
+    }
+
+    private void RemoveGateQuestion(Guid id)
+    {
+        _gateQuestions = _gateQuestions.Where(q => q.Id != id).ToList();
+    }
+
+    private void AddWheelItem() => _wheelItems.Add(string.Empty);
+
+    private void RemoveWheelItem(int index)
+    {
+        if (index >= 0 && index < _wheelItems.Count)
+        {
+            _wheelItems.RemoveAt(index);
+        }
+    }
+
+    private async Task HandleHeroUpload(InputFileChangeEventArgs args)
+    {
+        _heroUploadError = null;
+
+        try
+        {
+            var file = args.File;
+            if (file is null)
+            {
+                _heroUploadError = "Bitte eine Datei auswaehlen.";
+                return;
+            }
+
+            var result = await HeroImageService.UploadAsync(file, _heroCaption);
+            if (!result.Success || result.Value is null)
+            {
+                _heroUploadError = result.Error ?? "Upload fehlgeschlagen.";
+                return;
+            }
+
+            _heroImage = result.Value;
+            _heroCaption = _heroImage.Caption ?? string.Empty;
+            _successMessage = "Hero Bild aktualisiert.";
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e.Message);
+        }
+    }
+
+    private void AddMemory()
+    {
+        _memories.Add(new MemoryForm
+        {
+            Id = Guid.NewGuid(),
+            Title = string.Empty,
+            Description = string.Empty,
+            Date = string.Empty,
+            Icon = string.Empty
+        });
+    }
+
+    private void RemoveMemory(Guid id)
+    {
+        _memories = _memories.Where(m => m.Id != id).ToList();
+    }
+
+    private void AddHighlight()
+    {
+        _highlights.Add(new HighlightForm
+        {
+            Id = Guid.NewGuid(),
+            Icon = string.Empty,
+            Title = string.Empty,
+            Description = string.Empty
+        });
+    }
+
+    private void RemoveHighlight(Guid id)
+    {
+        _highlights = _highlights.Where(h => h.Id != id).ToList();
+    }
+
+    private void AddSong()
+    {
+        _songs.Add(new SongForm
+        {
+            Id = Guid.NewGuid(),
+            Url = string.Empty,
+            Artist = string.Empty
+        });
+    }
+
+    private void RemoveSong(Guid id)
+    {
+        _songs = _songs.Where(s => s.Id != id).ToList();
+    }
+
+    private async Task HandleSaveAsync()
+    {
+        _errorMessage = null;
+        _successMessage = null;
+
+        var captionResult = await HeroImageService.UpdateCaptionAsync(_heroCaption);
+        if (!captionResult.Success)
+        {
+            _errorMessage = captionResult.Error;
+            return;
+        }
+        _heroImage = captionResult.Value;
+
+        var envEntries = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [LoveConfigLoader.Keys.HeroTitle] = _model.HeroTitle ?? string.Empty,
+            [LoveConfigLoader.Keys.HeroSubtitle] = _model.HeroSubtitle ?? string.Empty,
+            [LoveConfigLoader.Keys.HeroIntro] = _model.HeroIntro ?? string.Empty,
+            [LoveConfigLoader.Keys.HeroCta] = _model.HeroCta ?? string.Empty,
+            [LoveConfigLoader.Keys.HeroCtaAfter] = _model.HeroCtaAfter ?? string.Empty,
+
+            [LoveConfigLoader.Keys.RelationshipHeading] = _model.RelationshipHeading ?? string.Empty,
+            [LoveConfigLoader.Keys.RelationshipSubheading] = _model.RelationshipSubheading ?? string.Empty,
+            [LoveConfigLoader.Keys.RelationshipFutureTitle] = _model.RelationshipFutureTitle ?? string.Empty,
+            [LoveConfigLoader.Keys.RelationshipFutureText] = _model.RelationshipFutureText ?? string.Empty,
+
+            [LoveConfigLoader.Keys.LoveLetterHeading] = _model.LoveLetterHeading ?? string.Empty,
+
+            [LoveConfigLoader.Keys.GateTitle] = _model.GateTitle ?? string.Empty,
+            [LoveConfigLoader.Keys.GateSubtitle] = _model.GateSubtitle ?? string.Empty,
+            [LoveConfigLoader.Keys.GateErrorMessage] = _model.GateErrorMessage ?? string.Empty,
+
+            [LoveConfigLoader.Keys.BucketEyebrow] = _model.BucketEyebrow ?? string.Empty,
+            [LoveConfigLoader.Keys.BucketHeading] = _model.BucketHeading ?? string.Empty,
+            [LoveConfigLoader.Keys.BucketSubheading] = _model.BucketSubheading ?? string.Empty,
+
+            [LoveConfigLoader.Keys.SongsEyebrow] = _model.SongsEyebrow ?? string.Empty,
+            [LoveConfigLoader.Keys.SongsHeading] = _model.SongsHeading ?? string.Empty,
+            [LoveConfigLoader.Keys.SongsSubheading] = _model.SongsSubheading ?? string.Empty,
+
+            [LoveConfigLoader.Keys.SpotifyClientId] = _model.SpotifyClientId ?? string.Empty,
+            [LoveConfigLoader.Keys.SpotifyClientSecret] = _model.SpotifyClientSecret ?? string.Empty,
+            [LoveConfigLoader.Keys.SpotifyPlaylistId] = _model.SpotifyPlaylistId ?? string.Empty
+        };
+
+        if (!TryNormalizeDate(_model.RelationshipStartDate, "Startdatum", out var startDateValue))
+        {
+            return;
+        }
+
+        envEntries[LoveConfigLoader.Keys.RelationshipStartDate] = startDateValue;
+
+        if (!TryNormalizeBool(_model.RelationshipShowWheel, "Wheel anzeigen", out var showWheelValue))
+        {
+            return;
+        }
+
+        if (!TryNormalizeBool(_model.MemoriesVisible, "Erinnerungen anzeigen", out var memoriesVisibleValue))
+        {
+            return;
+        }
+
+        if (!TryNormalizeInt(_model.GalleryFavoriteLimit, "Favoriten-Limit", out var favLimitValue))
+        {
+            return;
+        }
+
+        envEntries[LoveConfigLoader.Keys.RelationshipShowWheel] = showWheelValue;
+        envEntries[LoveConfigLoader.Keys.MemoriesVisible] = memoriesVisibleValue;
+        envEntries[LoveConfigLoader.Keys.GalleryFavoriteLimit] = favLimitValue;
+
+        if (!TryBuildGateQuestions(out var gateQuestionsJson))
+        {
+            return;
+        }
+
+        envEntries[LoveConfigLoader.Keys.GateQuestions] = gateQuestionsJson;
+
+        if (!TryBuildStringList(_wheelItems, "Wheel Items", LoveConfigLoader.Keys.RelationshipWheelItems, envEntries)) return;
+        if (!TryBuildParagraphs(out var letterJson)) return;
+        envEntries[LoveConfigLoader.Keys.LoveLetterParagraphs] = letterJson;
+        if (!TryBuildMemories(out var memoriesJson)) return;
+        envEntries[LoveConfigLoader.Keys.MemoriesItems] = memoriesJson;
+        if (!TryBuildHighlights(out var highlightsJson)) return;
+        envEntries[LoveConfigLoader.Keys.HighlightItems] = highlightsJson;
+        if (!TryBuildSongs(out var songsJson)) return;
+        envEntries[LoveConfigLoader.Keys.SongsItems] = songsJson;
+
+        var envContent = BuildEnvContent(envEntries);
+
+        await DownloadEnvAsync(envContent);
+
+        _successMessage = "love.env wurde heruntergeladen. Hero-Bild und Untertitel werden lokal gespeichert, die .env nicht.";
+    }
+    private bool TryNormalizeDate(string? value, string label, out string normalized)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            normalized = string.Empty;
+            return true;
+        }
+
+        if (!DateOnly.TryParse(value, out var parsed))
+        {
+            _errorMessage = $"{label} ist ungueltig. Erwartet wird yyyy-MM-dd.";
+            normalized = string.Empty;
+            return false;
+        }
+
+        normalized = parsed.ToString("yyyy-MM-dd");
+        return true;
+    }
+
+    private bool TryNormalizeBool(string? value, string label, out string normalized)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            normalized = string.Empty;
+            return true;
+        }
+
+        if (!bool.TryParse(value, out var parsed))
+        {
+            _errorMessage = $"{label} muss 'true' oder 'false' sein.";
+            normalized = string.Empty;
+            return false;
+        }
+
+        normalized = parsed.ToString().ToLowerInvariant();
+        return true;
+    }
+
+    private bool TryNormalizeInt(string? value, string label, out string normalized)
+    {
+        normalized = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        if (!int.TryParse(value, out var parsed) || parsed <= 0)
+        {
+            _errorMessage = $"{label} muss eine Zahl > 0 sein.";
+            return false;
+        }
+
+        normalized = parsed.ToString();
+        return true;
+    }
+
+    private bool TryCompactJson<T>(string? raw, string label, string envKey, IDictionary<string, string> target)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            target[envKey] = string.Empty;
+            return true;
+        }
+
+        if (!LoveConfigLoader.TryDeserialize<T>(raw, out var parsed, out var error))
+        {
+            _errorMessage = $"{label} ist keine gueltige JSON-Liste: {error}";
+            _successMessage = null;
+            return false;
+        }
+
+        target[envKey] = LoveConfigLoader.ToJson(parsed!, indented: false);
+        return true;
+    }
+
+    private bool TryBuildGateQuestions(out string json)
+    {
+        json = string.Empty;
+
+        if (_gateQuestions.Count == 0)
+        {
+            json = "[]";
+            return true;
+        }
+
+        var built = new List<GateQuestion>();
+
+        foreach (var gate in _gateQuestions)
+        {
+            if (string.IsNullOrWhiteSpace(gate.Prompt))
+            {
+                _errorMessage = "Gate Frage: Fragetext darf nicht leer sein.";
+                _successMessage = null;
+                return false;
+            }
+
+            if (gate.Type == GateQuestionType.MultipleChoice)
+            {
+                var choices = (gate.ChoicesText ?? string.Empty)
+                    .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(c => c.Trim())
+                    .Where(c => !string.IsNullOrWhiteSpace(c))
+                    .ToList();
+
+                if (choices.Count == 0)
+                {
+                    _errorMessage = $"Gate Frage \"{gate.Prompt}\": Mindestens eine Antwort angeben.";
+                    _successMessage = null;
+                    return false;
+                }
+
+                if (!int.TryParse(gate.AnswerIndex, out var parsedIndex) || parsedIndex < 0 || parsedIndex >= choices.Count)
+                {
+                    _errorMessage = $"Gate Frage \"{gate.Prompt}\": AnswerIndex muss zwischen 0 und {choices.Count - 1} liegen.";
+                    _successMessage = null;
+                    return false;
+                }
+
+                built.Add(new GateQuestion
+                {
+                    Prompt = gate.Prompt,
+                    Type = GateQuestionType.MultipleChoice,
+                    Choices = choices,
+                    AnswerIndex = parsedIndex,
+                    AnswerText = null,
+                    IsCaseSensitive = false
+                });
+            }
+            else
+            {
+                var answer = gate.AnswerText?.Trim() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(answer))
+                {
+                    _errorMessage = $"Gate Frage \"{gate.Prompt}\": Antwort darf nicht leer sein.";
+                    _successMessage = null;
+                    return false;
+                }
+
+                built.Add(new GateQuestion
+                {
+                    Prompt = gate.Prompt,
+                    Type = GateQuestionType.Text,
+                    Choices = null,
+                    AnswerIndex = null,
+                    AnswerText = answer,
+                    IsCaseSensitive = gate.IsCaseSensitive
+                });
+            }
+        }
+
+        json = LoveConfigLoader.ToJson(built, indented: false);
+        return true;
+    }
+
+    private bool TryBuildStringList(List<string> items, string label, string envKey, IDictionary<string, string> target)
+    {
+        if (items.Count == 0)
+        {
+            target[envKey] = string.Empty;
+            return true;
+        }
+
+        if (items.Any(string.IsNullOrWhiteSpace))
+        {
+            _errorMessage = $"{label}: Einträge dürfen nicht leer sein.";
+            _successMessage = null;
+            return false;
+        }
+
+        target[envKey] = LoveConfigLoader.ToJson(items, indented: false);
+        return true;
+    }
+
+    private bool TryBuildMemories(out string json)
+    {
+        if (_memories.Count == 0)
+        {
+            json = string.Empty;
+            return true;
+        }
+
+        var built = new List<MemoryEntry>();
+        foreach (var memory in _memories)
+        {
+            if (string.IsNullOrWhiteSpace(memory.Title) ||
+                string.IsNullOrWhiteSpace(memory.Description) ||
+                string.IsNullOrWhiteSpace(memory.Date) ||
+                string.IsNullOrWhiteSpace(memory.Icon))
+            {
+                _errorMessage = "Erinnerungen: Titel, Beschreibung, Datum und Icon sind Pflicht.";
+                _successMessage = null;
+                json = string.Empty;
+                return false;
+            }
+
+            built.Add(new MemoryEntry
+            {
+                Title = memory.Title,
+                Description = memory.Description,
+                Date = memory.Date,
+                Icon = memory.Icon
+            });
+        }
+
+        json = LoveConfigLoader.ToJson(built, indented: false);
+        return true;
+    }
+
+    private bool TryBuildHighlights(out string json)
+    {
+        if (_highlights.Count == 0)
+        {
+            json = string.Empty;
+            return true;
+        }
+
+        var built = new List<HighlightItem>();
+        foreach (var highlight in _highlights)
+        {
+            if (string.IsNullOrWhiteSpace(highlight.Icon) ||
+                string.IsNullOrWhiteSpace(highlight.Title) ||
+                string.IsNullOrWhiteSpace(highlight.Description))
+            {
+                _errorMessage = "Highlights: Icon, Titel und Beschreibung sind Pflicht.";
+                _successMessage = null;
+                json = string.Empty;
+                return false;
+            }
+
+            built.Add(new HighlightItem
+            {
+                Icon = highlight.Icon,
+                Title = highlight.Title,
+                Description = highlight.Description
+            });
+        }
+
+        json = LoveConfigLoader.ToJson(built, indented: false);
+        return true;
+    }
+
+    private bool TryBuildSongs(out string json)
+    {
+        if (_songs.Count == 0)
+        {
+            json = string.Empty;
+            return true;
+        }
+
+        var built = new List<SongItem>();
+        foreach (var song in _songs)
+        {
+            if (string.IsNullOrWhiteSpace(song.Url) || string.IsNullOrWhiteSpace(song.Artist))
+            {
+                _errorMessage = "Songs: URL und Artist sind Pflicht.";
+                _successMessage = null;
+                json = string.Empty;
+                return false;
+            }
+
+            built.Add(new SongItem
+            {
+                Url = song.Url,
+                Artist = song.Artist
+            });
+        }
+
+        json = LoveConfigLoader.ToJson(built, indented: false);
+        return true;
+    }
+
+    private bool TryBuildParagraphs(out string json)
+    {
+        var paragraphs = (_letterText ?? string.Empty)
+            .Split(new[] { "\r\n\r\n", "\n\n", "\r\r" }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Trim())
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .ToList();
+
+        if (paragraphs.Count == 0)
+        {
+            _errorMessage = "Liebesbrief: Bitte mindestens einen Absatz eintragen.";
+            _successMessage = null;
+            json = string.Empty;
+            return false;
+        }
+
+        json = LoveConfigLoader.ToJson(paragraphs, indented: false);
+        return true;
+    }
+
+    private string BuildEnvContent(IDictionary<string, string> entries)
+    {
+        var builder = new StringBuilder();
+        foreach (var entry in entries)
+        {
+            builder.Append(entry.Key)
+                   .Append('=')
+                   .Append(entry.Value)
+                   .AppendLine();
+        }
+
+        return builder.ToString();
+    }
+
+    private async Task EnsureModuleAsync()
+    {
+        if (_downloadModule == null)
+        {
+            _downloadModule = await Js.InvokeAsync<IJSObjectReference>("import", "/config-download.js");
+        }
+    }
+
+    private async Task DownloadEnvAsync(string content)
+    {
+        await EnsureModuleAsync();
+
+        if (_downloadModule != null)
+        {
+            await _downloadModule.InvokeVoidAsync("downloadEnv", DownloadFileName, content);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_downloadModule != null)
+        {
+            await _downloadModule.DisposeAsync();
+        }
+    }
+
+    private sealed class GateQuestionForm
+    {
+        public Guid Id { get; set; }
+        public string Prompt { get; set; } = string.Empty;
+        public GateQuestionType Type { get; set; } = GateQuestionType.MultipleChoice;
+        public string ChoicesText { get; set; } = string.Empty;
+        public string AnswerIndex { get; set; } = "0";
+        public string AnswerText { get; set; } = string.Empty;
+        public bool IsCaseSensitive { get; set; }
+    }
+
+    private sealed class MemoryForm
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Date { get; set; } = string.Empty;
+        public string Icon { get; set; } = string.Empty;
+    }
+
+    private sealed class HighlightForm
+    {
+        public Guid Id { get; set; }
+        public string Icon { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+    }
+
+    private sealed class SongForm
+    {
+        public Guid Id { get; set; }
+        public string Url { get; set; } = string.Empty;
+        public string Artist { get; set; } = string.Empty;
+    }
+
+    private sealed class EnvFormModel
+    {
+        public string HeroTitle { get; set; } = string.Empty;
+        public string HeroSubtitle { get; set; } = string.Empty;
+        public string HeroIntro { get; set; } = string.Empty;
+        public string HeroCta { get; set; } = string.Empty;
+        public string HeroCtaAfter { get; set; } = string.Empty;
+
+        public string RelationshipStartDate { get; set; } = string.Empty;
+        public string RelationshipHeading { get; set; } = string.Empty;
+        public string RelationshipSubheading { get; set; } = string.Empty;
+        public string RelationshipFutureTitle { get; set; } = string.Empty;
+        public string RelationshipFutureText { get; set; } = string.Empty;
+        public string RelationshipShowWheel { get; set; } = string.Empty;
+
+        public string LoveLetterHeading { get; set; } = string.Empty;
+
+        public string GateTitle { get; set; } = string.Empty;
+        public string GateSubtitle { get; set; } = string.Empty;
+        public string GateErrorMessage { get; set; } = string.Empty;
+
+        public string MemoriesVisible { get; set; } = string.Empty;
+        public string GalleryFavoriteLimit { get; set; } = string.Empty;
+
+        public string BucketEyebrow { get; set; } = string.Empty;
+        public string BucketHeading { get; set; } = string.Empty;
+        public string BucketSubheading { get; set; } = string.Empty;
+
+        public string SongsEyebrow { get; set; } = string.Empty;
+        public string SongsHeading { get; set; } = string.Empty;
+        public string SongsSubheading { get; set; } = string.Empty;
+        public string SpotifyClientId { get; set; } = string.Empty;
+        public string SpotifyClientSecret { get; set; } = string.Empty;
+        public string SpotifyPlaylistId { get; set; } = string.Empty;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

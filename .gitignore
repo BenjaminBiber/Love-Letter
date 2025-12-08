@@ -416,3 +416,7 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Project-specific local data
+**/App_Data/
+**/uploads/
