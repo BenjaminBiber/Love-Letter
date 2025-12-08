@@ -1,0 +1,42 @@
+﻿@inherits LayoutComponentBase
+
+<div class="app-layout">
+    <header class="app-header">
+        <div class="app-header__brand">
+            <a href="/">Eine Seite nur für dich</a>
+        </div>
+        <button class="app-burger @( _menuOpen ? "is-open" : string.Empty)"
+                type="button"
+                aria-label="Menü öffnen"
+                aria-haspopup="true"
+                aria-expanded="@_menuOpen"
+                @onclick="ToggleMenu">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+    </header>
+
+    <nav class="app-menu @( _menuOpen ? "is-visible" : string.Empty)"
+         aria-hidden="@(!_menuOpen)"
+         aria-label="Hauptmenü">
+        <NavLink href="/" Match="NavLinkMatch.All" class="app-menu__link" @onclick="CloseMenu">Startseite</NavLink>
+        <NavLink href="/bucket-list" class="app-menu__link" @onclick="CloseMenu">Bucket List</NavLink>
+        <NavLink href="/gallery" class="app-menu__link" @onclick="CloseMenu">Galerie</NavLink>
+    </nav>
+
+    <main class="app-shell">
+        @Body
+    </main>
+</div>
+
+@code {
+    private bool _menuOpen;
+
+    private void ToggleMenu() => _menuOpen = !_menuOpen;
+
+    private void CloseMenu()
+    {
+        _menuOpen = false;
+    }
+}

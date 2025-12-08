@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  loveletter-app:
+    image: ghcr.io/your-org/loveletter:latest
+    container_name: loveletter-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      BUCKETLIST_MASTER_PASSWORD: super-secret-password
+      # Optional: ASPNETCORE_ENVIRONMENT: Production
+    volumes:
+      - loveletter-data:/app/App_Data
+      - loveletter-uploads:/app/wwwroot/uploads
+    # Uncomment if HTTPS termination is handled externally
+    # environment:
+    #   ASPNETCORE_URLS: http://+:8080
+
+volumes:
+  loveletter-data:
+    driver: local
+  loveletter-uploads:
+    driver: local

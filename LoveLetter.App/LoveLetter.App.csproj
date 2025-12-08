@@ -1,0 +1,113 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0-preview.6.24327.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.0-preview.6.24327.4" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageReference Include="SpotifyAPI.Web" Version="7.2.1" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\.gitkeep" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\1cf052f7-4296-4f43-b7e4-46ee382e300b.png" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\208d44c8-a6a7-4c9d-a1cd-d080b780d654.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\38238fd7-e56c-471e-ba82-263312c2599a.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\3aeaf90a-3710-47da-8794-3b87696b6659.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\3d331dde-3391-46be-a8c3-16bd9dc9b9bc.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\7dd3d7ff-526f-4570-883f-f384ec62a1cc.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\7df6272e-d481-48c8-93fd-35e7d508eb21.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\d09f1df3-80dc-4f05-83e6-bbe9223c9a7a.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\d4ad5fe4-ec31-4051-b277-b2adcd5d5949.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\e1bc9138-5732-4e7f-8c59-b9e02dd0acda.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\f0ed4dd0-733d-4f62-a517-02b0bb74674e.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\thumbs\1cf052f7-4296-4f43-b7e4-46ee382e300b-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\thumbs\208d44c8-a6a7-4c9d-a1cd-d080b780d654-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\thumbs\38238fd7-e56c-471e-ba82-263312c2599a-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\thumbs\3aeaf90a-3710-47da-8794-3b87696b6659-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\thumbs\3d331dde-3391-46be-a8c3-16bd9dc9b9bc-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\thumbs\7dd3d7ff-526f-4570-883f-f384ec62a1cc-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\thumbs\7df6272e-d481-48c8-93fd-35e7d508eb21-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\thumbs\d09f1df3-80dc-4f05-83e6-bbe9223c9a7a-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\thumbs\d4ad5fe4-ec31-4051-b277-b2adcd5d5949-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\thumbs\e1bc9138-5732-4e7f-8c59-b9e02dd0acda-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\38bbeb0e-1f3d-4152-9602-563c86341c2c\thumbs\f0ed4dd0-733d-4f62-a517-02b0bb74674e-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\3478abc8-c302-467b-9801-91521e85ee7a.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\35111aff-c5e4-48c8-ae13-16bf7c63cc0f.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\35d548fc-de2c-4fe2-9e0a-970a4ab8f236.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\4ab82e9e-cb13-4d60-aa50-fad732e10ba6.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\4ed783e3-5a2b-4e88-a2ae-e5d86d16de4d.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\55394a48-573f-4e3c-aaeb-657c54aed9f2.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\60f8848d-fc16-4d24-9615-a1baeb43593d.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\63254bae-70d5-4cf6-8572-1cb1de121f1a.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\cd8835fe-da6b-4258-82fd-6b70f8982851.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\fb4d7b63-d433-4b5c-968f-7d2feff58484.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\fcc4c501-260e-48ee-8ca7-f1070305f9b2.png" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\thumbs\3478abc8-c302-467b-9801-91521e85ee7a-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\thumbs\35111aff-c5e4-48c8-ae13-16bf7c63cc0f-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\thumbs\35d548fc-de2c-4fe2-9e0a-970a4ab8f236-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\thumbs\4ab82e9e-cb13-4d60-aa50-fad732e10ba6-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\thumbs\4ed783e3-5a2b-4e88-a2ae-e5d86d16de4d-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\thumbs\55394a48-573f-4e3c-aaeb-657c54aed9f2-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\thumbs\60f8848d-fc16-4d24-9615-a1baeb43593d-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\thumbs\63254bae-70d5-4cf6-8572-1cb1de121f1a-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\thumbs\cd8835fe-da6b-4258-82fd-6b70f8982851-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\thumbs\fb4d7b63-d433-4b5c-968f-7d2feff58484-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\94349c45-a94e-43d5-9783-457cfe4152d9\thumbs\fcc4c501-260e-48ee-8ca7-f1070305f9b2-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\1afb9fe4-5bd2-4988-b582-8e6024274e6f.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\1b3f3bf9-5376-4022-843d-ad717032ccfc.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\50c7bb49-f5a5-4d39-80e9-14b0e7200987.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\5d80ce17-5db3-4dc1-86cb-c3b54b43e4d8.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\603451ba-e9cd-4cce-a311-bf6c1c34efb1.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\616fbef7-1f81-436b-b67d-1fe4256fb20b.png" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\62090043-e9dc-48f8-89d6-b099fdfc8288.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\7e6e055a-662a-429d-85a2-cba8c0d866e7.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\853c5bf8-779c-4f83-a31d-9d598d430413.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\a9952362-1e58-4a2b-ab14-750729b5a11d.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\a9dc6bfd-eeae-48d6-8b2c-b78c77eab601.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\thumbs\1afb9fe4-5bd2-4988-b582-8e6024274e6f-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\thumbs\1b3f3bf9-5376-4022-843d-ad717032ccfc-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\thumbs\50c7bb49-f5a5-4d39-80e9-14b0e7200987-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\thumbs\5d80ce17-5db3-4dc1-86cb-c3b54b43e4d8-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\thumbs\603451ba-e9cd-4cce-a311-bf6c1c34efb1-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\thumbs\616fbef7-1f81-436b-b67d-1fe4256fb20b-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\thumbs\62090043-e9dc-48f8-89d6-b099fdfc8288-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\thumbs\7e6e055a-662a-429d-85a2-cba8c0d866e7-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\thumbs\853c5bf8-779c-4f83-a31d-9d598d430413-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\thumbs\a9952362-1e58-4a2b-ab14-750729b5a11d-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\aaa1b0ec-f018-4805-bc73-8fcc860a9f51\thumbs\a9dc6bfd-eeae-48d6-8b2c-b78c77eab601-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\486ad868-332a-4b28-8da7-6b41a53c1ac3.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\4fbcc8db-db8a-4ab2-8c27-e7bf396760ee.png" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\517b88a3-f524-4edb-ad8c-76413d555280.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\536d866c-de60-4062-bc5b-d44622390277.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\66b7964d-15ac-424b-99fc-6871b1cc7d98.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\732011ff-6fb5-4943-9a11-18b4a9e75937.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\89e6b10c-bd2d-4cf8-be58-4cff0ce74015.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\a410483f-cea6-414c-a6af-f963f83d8829.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\da264ab4-4f53-4b3f-83fc-085abdac61a9.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\e3918db4-e9e3-4c33-be84-65db226f42fd.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\e57e10d5-41e4-4735-b79e-b1cffeb5b65b.jpg" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\thumbs\486ad868-332a-4b28-8da7-6b41a53c1ac3-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\thumbs\4fbcc8db-db8a-4ab2-8c27-e7bf396760ee-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\thumbs\517b88a3-f524-4edb-ad8c-76413d555280-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\thumbs\536d866c-de60-4062-bc5b-d44622390277-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\thumbs\66b7964d-15ac-424b-99fc-6871b1cc7d98-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\thumbs\732011ff-6fb5-4943-9a11-18b4a9e75937-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\thumbs\89e6b10c-bd2d-4cf8-be58-4cff0ce74015-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\thumbs\a410483f-cea6-414c-a6af-f963f83d8829-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\thumbs\da264ab4-4f53-4b3f-83fc-085abdac61a9-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\thumbs\e3918db4-e9e3-4c33-be84-65db226f42fd-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\bucket\efc164e7-b96c-4c8c-b5d3-180ad20479bd\thumbs\e57e10d5-41e4-4735-b79e-b1cffeb5b65b-thumb.webp" />
+    <_ContentIncludedByDefault Remove="wwwroot\uploads\hero\hero-20251208130334.png" />
+  </ItemGroup>
+
+</Project>

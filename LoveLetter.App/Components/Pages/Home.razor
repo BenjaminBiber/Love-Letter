@@ -1,0 +1,886 @@
+﻿@page "/"
+@using System.Collections.Generic
+@using System.Globalization
+@using System.Linq
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using LoveLetter.App.Models
+@using LoveLetter.App.Services
+@using LoveLetter.App.Configuration
+@using SpotifyAPI.Web
+@inject LoveConfig Content
+@inject ProtectedSessionStorage SessionStorage
+@inject NavigationManager Navigation
+@inject ISpotifyMetadataService SpotifyMetadataService
+@inject ISpotifyPlaylistService SpotifyPlaylistService
+@inject IGalleryService GalleryService
+@inject IHeroImageService HeroImageService
+
+<PageTitle>Eine Seite nur für dich</PageTitle>
+
+<div class="background-glow"></div>
+
+<section class="gate @( _gatePassed ? "gate--hidden" : string.Empty)" aria-hidden="@(_gatePassed ? "true" : "false")">
+    <div class="gate__card">
+        <div class="gate__header">
+            <h1>@Content.Gate.Title</h1>
+            <p>@Content.Gate.Subtitle</p>
+        </div>
+        <form class="gate__questions" @onsubmit="HandleGateSubmit" @onsubmit:preventDefault>
+            @for (var questionIndex = 0; questionIndex < _activeGateQuestions.Count; questionIndex++)
+            {
+                var question = _activeGateQuestions[questionIndex];
+                var questionClass = _invalidGateQuestions.Contains(questionIndex)
+                    ? "gate__question is-shaking"
+                    : "gate__question";
+                var capturedQuestionIndex = questionIndex;
+
+                <fieldset class="@questionClass">
+                    <legend class="gate__question-title">@question.Prompt</legend>
+                    @if (question.Type == GateQuestionType.MultipleChoice)
+                    {
+                        <div class="gate__choices">
+                            @for (var choiceIndex = 0; choiceIndex < (question.Choices?.Count ?? 0); choiceIndex++)
+                            {
+                                var capturedChoiceIndex = choiceIndex;
+                                var isSelected = _multipleChoiceAnswers.TryGetValue(capturedQuestionIndex, out var selectedIndex) && selectedIndex == capturedChoiceIndex;
+                                <button type="button"
+                                        class="gate__choice @(isSelected ? "is-selected" : string.Empty)"
+                                        aria-pressed="@isSelected"
+                                        @onclick="() => SelectGateAnswer(capturedQuestionIndex, capturedChoiceIndex)">
+                                    @question.Choices![capturedChoiceIndex]
+                                </button>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <input class="gate__input"
+                               value="@GetTextAnswer(capturedQuestionIndex)"
+                               placeholder="Antwort eingeben"
+                               @oninput="args => SetTextAnswer(capturedQuestionIndex, args.Value?.ToString())" />
+                    }
+                </fieldset>
+            }
+
+            <button class="gate__cta" type="submit">Weiter</button>
+        </form>
+        <p class="gate__error" role="alert" hidden="@string.IsNullOrEmpty(_gateError)">@_gateError</p>
+    </div>
+</section>
+
+<div id="site-content" hidden="@(!_gatePassed)">
+    <header class="hero" id="hero">
+        <div class="hero__content">
+            @if (!string.IsNullOrWhiteSpace(Content.Hero.Subtitle))
+            {
+                <p class="hero__subtitle">@Content.Hero.Subtitle</p>
+            }
+            <h1 class="hero__title">@Content.Hero.Title</h1>
+            <p class="hero__intro">@Content.Hero.Intro</p>
+            <button class="hero__cta" type="button" @onclick="HandleHeroCta">
+                @(_letterRevealed ? Content.Hero.CtaAfter : Content.Hero.Cta)
+            </button>
+        </div>
+        <div class="hero__media">
+            <div class="hero__media-frame">
+                <img src="@(_heroImage?.Src ?? Content.Hero.FeaturedPhoto.Src)" alt="@GetHeroAlt()" id="heroImage" />
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_heroImage?.Caption ?? Content.Hero.FeaturedPhoto.Caption))
+            {
+                <p class="hero__media-caption">@(_heroImage?.Caption ?? Content.Hero.FeaturedPhoto.Caption)</p>
+            }
+        </div>
+        <div class="hero__floating-hearts" aria-hidden="true">
+            @foreach (var heart in _floatingHearts)
+            {
+                <span class="heart" style="left:@FormatPercent(heart.LeftOffset);bottom:@FormatPixels(heart.BottomOffset);animation-delay:@FormatSeconds(heart.DelaySeconds);animation-duration:@FormatSeconds(heart.DurationSeconds);"></span>
+            }
+        </div>
+    </header>
+
+    <main>
+        <section class="letter reveal @( _letterRevealed ? "is-visible" : string.Empty )" id="love-letter" hidden="@(!_letterRevealed)">
+            <div class="section-header d-flex justify-content-center">
+                <h2>@Content.LoveLetter.Heading</h2>
+            </div>
+            <article class="letter__content">
+                @foreach (var paragraph in Content.LoveLetter.Paragraphs)
+                {
+                    <p>@paragraph</p>
+                }
+            </article>
+        </section>
+
+        <section class="gallery reveal" id="gallery">
+            <div class="section-header d-flex justify-content-center gallery__header">
+                <div>
+                    <p class="section-eyebrow">Bilder</p>
+                    <h2>Ein Blick zurück</h2>
+                    <p class="section-subtext">Bis zu sechs Favoriten aus unserer Galerie – jederzeit erweiterbar.</p>
+                </div>
+            </div>
+
+            @if (_favoritesLoading)
+            {
+                <p class="gallery__empty">Lade deine Lieblingsmomente...</p>
+            }
+            else if (!string.IsNullOrEmpty(_galleryError))
+            {
+                <p class="gallery__empty">@_galleryError</p>
+            }
+            else if (!_favoritePhotos.Any())
+            {
+                <p class="gallery__empty">
+                    Noch keine Favoriten ausgewählt. <a href="/gallery">Jetzt Galerie öffnen</a>.
+                </p>
+            }
+            else
+            {
+                <div class="gallery__nav-row">
+                    <a class="gallery__link" href="/gallery">Komplette Galerie öffnen</a>
+                </div>
+                <div class="gallery__grid">
+                    @foreach (var (photo, index) in _favoritePhotos.Select((value, index) => (value, index)))
+                    {
+                        <article class="gallery-card @(photo.IsFavorite ? "is-favorite" : string.Empty)"
+                                 style="animation-delay:@(index * 100)ms"
+                                 role="button"
+                                 tabindex="0"
+                                 @onclick="() => OpenLightbox(photo)"
+                                 @onkeydown="args => HandleGalleryKey(args, photo)">
+                            <div class="gallery-card__image">
+                                <img src="@(photo.ThumbnailUrl ?? photo.Url)" alt="@(!string.IsNullOrWhiteSpace(photo.Caption) ? photo.Caption : "Galeriebild")" loading="lazy" />
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(photo.Caption))
+                            {
+                                <div class="gallery-card__body">
+                                    <p class="gallery-card__caption">@photo.Caption</p>
+                                </div>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        @if (Content.MemoriesVisible && Content.Memories.Count > 0)
+        {
+            <section class="memories reveal" id="memories">
+                <div class="section-header">
+                    <p class="section-eyebrow">Erinnerungen</p>
+                    <h2>Unsere Lieblingsmomente</h2>
+                </div>
+                <div class="memories__timeline row gy-4 gap-3 d-flex align-items-center justify-content-center">
+                    @foreach (var (memory, index) in Content.Memories.Select((value, index) => (value, index)))
+                    {
+                        <article class="memory-card col-12 col-lg-6" style="animation-delay:@(index * 120)ms">
+                            <div class="memory-card__icon">@memory.Icon</div>
+                            <div class="memory-card__body">
+                                <h3 class="memory-card__title">@memory.Title</h3>
+                                <p class="memory-card__date">@memory.Date</p>
+                                <p>@memory.Description</p>
+                            </div>
+                        </article>
+                    }
+                </div>
+            </section>
+        }
+
+        @if (_relationshipInfo is not null)
+        {
+            <section class="together reveal" id="together">
+                <div class="section-header">
+                    <p class="section-eyebrow">Wir sind zusammen seit</p>
+                    <h2>@_relationshipInfo.Heading</h2>
+                    @if (!string.IsNullOrWhiteSpace(_relationshipInfo.Subheading))
+                    {
+                        <p class="section-subtext">@_relationshipInfo.Subheading</p>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_relationshipInfo.Meta))
+                    {
+                        <p class="together__meta">@_relationshipInfo.Meta</p>
+                    }
+                </div>
+
+                <div class="together__content">
+                    @if (_relationshipInfo.IsFuture)
+                    {
+                        <div class="together__message">
+                            <div class="together__message-content">
+                                <span class="together__message-badge">Bald</span>
+                                <p class="together__message-title">@_relationshipInfo.FutureTitle</p>
+                                <p class="together__message-text">@_relationshipInfo.FutureText</p>
+                            </div>
+                        </div>
+                        @if (CanShowWheelButton)
+                        {
+                            <div class="together__wheel">
+                                <button type="button" class="wheel-btn" @onclick="OpenWheelDialog">Glücksrad drehen</button>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="together__stats">
+                            @foreach (var stat in _relationshipInfo.Stats)
+                            {
+                                <article class="stat-card">
+                                    <p class="stat-card__value">@stat.Value.ToString("N0", GermanCulture)</p>
+                                    <p class="stat-card__label">@stat.Label</p>
+                                </article>
+                            }
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+
+        @if (_isWheelDialogOpen)
+        {
+            <div class="wheel-overlay" role="dialog" aria-modal="true" @onclick="CloseWheelDialog">
+                <div class="wheel-dialog" @onclick:stopPropagation="true">
+                    <button type="button" class="wheel-dialog__close" aria-label="Dialog schließen" @onclick="CloseWheelDialog">✕</button>
+                    <div class="wheel">
+                        <div class="wheel__spinner" style="@($"transform: rotate({_wheelRotation}deg);")">
+                            @for (var index = 0; index < WheelItems.Count; index++)
+                            {
+                                var angle = 360.0 / WheelItems.Count;
+                                var rotation = angle * index;
+                                var skew = 90 - angle;
+                                <div class="wheel__segment" style="@($"transform: rotate({rotation}deg) skewY({skew}deg);")">
+                                    <span>@WheelItems[index]</span>
+                                </div>
+                            }
+                        </div>
+                        <div class="wheel__indicator">▼</div>
+                    </div>
+                    <div class="wheel-dialog__actions">
+                        <button type="button" class="wheel-btn" disabled="@_isWheelSpinning" @onclick="SpinWheelAsync">@(_isWheelSpinning ? "Drehe..." : "Nochmal drehen")</button>
+                        @if (!string.IsNullOrWhiteSpace(_wheelResult))
+                        {
+                            <p class="wheel-dialog__result">Dein Ergebnis: @_wheelResult</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
+        <section class="highlights reveal" id="highlights">
+            <div class="section-header">
+                <p class="section-eyebrow">Warum wir</p>
+                <h2>Was ich an dir liebe</h2>
+            </div>
+            <div class="highlight__cards">
+                @foreach (var (highlight, index) in Content.Highlights.Select((value, index) => (value, index)))
+                {
+                    <article class="highlight-card" style="animation-delay:@(index * 100)ms">
+                        <span>@highlight.Icon</span>
+                        <h3>@highlight.Title</h3>
+                        <p>@highlight.Description</p>
+                    </article>
+                }
+            </div>
+        </section>
+
+        <section class="songs reveal" id="song-library">
+            <div class="section-header">
+                <p class="section-eyebrow">@Content.Songs.Eyebrow</p>
+                <h2>@Content.Songs.Heading</h2>
+                @if(!String.IsNullOrEmpty(_playListUrl))
+                {
+                    <a style="text-decoration: none" href="@_playListUrl">
+                        <i style="color: lightgray; opacity: 50%" class="section-eyebrow">Zur Playlist</i>
+                    </a>
+                }
+            </div>
+            <div class="songs__grid">
+                @if (_tracks.Any())
+                {
+                    foreach (var track in _tracks)
+                    {
+                        var cover = track.Album?.Images.FirstOrDefault();
+                        var artist = track.Artists?.FirstOrDefault();
+
+                        <article class="song-card" style="animation-delay:@((_tracks.IndexOf(track)) * 90)ms">
+                            <div class="song-card__media">
+                                <img class="song-card__cover"
+                                     src="@(cover?.Url ?? string.Empty)"
+                                     alt="Cover von @track.Name"
+                                     loading="lazy"
+                                     hidden="@(cover is null)"/>
+                            </div>
+                            <div class="song-card__body">
+                                <h3 class="song-card__title" id="@($"song-title-{_tracks.IndexOf(track)}")">@track.Name</h3>
+                                <p class="song-card__artist">@(!string.IsNullOrWhiteSpace(artist?.Name) ? artist.Name : "Unbekannter Artist")</p>
+                            </div>
+                        </article>
+                    }
+                }
+                else
+                {
+                    foreach (var (song, index) in _songs.Select((value, index) => (value, index)))
+                    {
+                        <article class="song-card" style="animation-delay:@(index * 90)ms">
+                            <div class="song-card__media">
+                                <img class="song-card__cover"
+                                     src="@song.CoverUrl"
+                                     alt="Cover von @song.Label"
+                                     loading="lazy"
+                                     hidden="@(!song.HasCover)"/>
+                            </div>
+                            <div class="song-card__body">
+                                <h3 class="song-card__title" id="@song.TitleElementId">@song.DisplayTitle</h3>
+                                <p class="song-card__artist">@song.Artist</p>
+                                <div class="song-card__actions">
+                                    <a class="song-card__link" href="@song.Url" target="_blank" rel="noreferrer noopener">Auf Spotify anhören</a>
+                                </div>
+                            </div>
+                        </article>
+                    }
+                }
+            </div>
+        </section>
+    </main>
+</div>
+
+<div class="lightbox @( _activeGalleryItem is null ? "is-hidden" : string.Empty)" aria-hidden="@(_activeGalleryItem is null ? "true" : "false")" role="dialog">
+    <button class="lightbox__close" type="button" aria-label="Schließen" @onclick="CloseLightbox">&times;</button>
+    @if (_activeGalleryItem is not null)
+    {
+        <figure class="lightbox__media">
+            <img src="@_activeGalleryItem.Url" alt="@(_activeGalleryItem.Caption ?? "Galeriebild")" />
+            @if (!string.IsNullOrWhiteSpace(_activeGalleryItem.Caption))
+            {
+                <figcaption>@_activeGalleryItem.Caption</figcaption>
+            }
+        </figure>
+    }
+</div>
+
+@code {
+    private static readonly CultureInfo GermanCulture = CultureInfo.GetCultureInfo("de-DE");
+    private bool _gatePassed;
+    private string? _gateError;
+    private bool _letterRevealed;
+    private readonly HashSet<int> _invalidGateQuestions = new();
+    private RelationshipViewModel? _relationshipInfo;
+    private readonly List<GateQuestion> _activeGateQuestions = [];
+    private readonly Dictionary<int, int> _multipleChoiceAnswers = new();
+    private readonly Dictionary<int, string> _textAnswers = new();
+
+    private bool _gateStateRestored;
+
+    private readonly List<GalleryPhotoDto> _favoritePhotos = [];
+    private bool _favoritesLoading;
+    private bool _favoritesLoaded;
+    private string? _galleryError;
+    private GalleryPhotoDto? _activeGalleryItem;
+    private readonly List<FloatingHeart> _floatingHearts = [];
+    private readonly List<SongViewModel> _songs = [];
+    private List<FullTrack> _tracks = [];
+    private bool _songMetadataLoadStarted;
+    private bool _pendingScrollToLetter;
+    private bool _isWheelDialogOpen;
+    private bool _isWheelSpinning;
+    private double _wheelRotation;
+    private string? _wheelResult;
+    private int _wheelSelectedIndex;
+    private string _playListUrl = "";
+    private HeroImageInfo _heroImage = default!;
+
+    private const string GateStorageKey = "loveletter:gate-session";
+    private int MaxPreloadedFavorites => GalleryService.FavoriteLimit;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadHeroImageAsync();
+        InitializeGateQuestions();
+        _relationshipInfo = CalculateRelationship();
+        InitializeFloatingHearts();
+        await LoadPlaylistAsync();
+        InitializeSongs();
+    }
+
+    private async Task LoadPlaylistAsync()
+    {
+        try
+        {
+            var playlist = await SpotifyPlaylistService.GetPlaylistAsync();
+            if (playlist is null)
+            {
+                _tracks = [];
+                _playListUrl = string.Empty;
+                return;
+            }
+
+            _tracks = playlist.Tracks.ToList();
+            _playListUrl = playlist.PlaylistUrl;
+        }
+        catch
+        {
+            _tracks = [];
+            _playListUrl = string.Empty;
+        }
+    }
+
+    private async Task LoadHeroImageAsync()
+    {
+        try
+        {
+            _heroImage = await HeroImageService.GetAsync();
+        }
+        catch
+        {
+            _heroImage = new HeroImageInfo(Content.Hero.FeaturedPhoto.Src, Content.Hero.FeaturedPhoto.Caption);
+        }
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_gateStateRestored)
+        {
+            await RestoreGateStateAsync();
+        }
+
+        if (firstRender && !_songMetadataLoadStarted)
+        {
+            _songMetadataLoadStarted = true;
+            _ = LoadSongMetadataAsync();
+        }
+
+        if (_pendingScrollToLetter)
+        {
+            _pendingScrollToLetter = false;
+            ScrollToLetter();
+        }
+    }
+
+    private RelationshipViewModel CalculateRelationship()
+    {
+        var start = Content.Relationship.StartDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        var now = DateTime.Now;
+        if (start > now)
+        {
+            var daysUntil = (int)Math.Ceiling((start - now).TotalDays);
+            return new RelationshipViewModel(
+                true,
+                Content.Relationship.Heading ?? "Noch nicht ganz soweit",
+                Content.Relationship.Subheading,
+                null,
+                Content.Relationship.FutureTitle ?? "Noch nicht verfügbar",
+                Content.Relationship.FutureText ?? $"In {daysUntil} Tagen startet unser Abenteuer.",
+                Array.Empty<RelationshipStat>());
+        }
+
+        var diff = now - start;
+        var stats = new[]
+        {
+            new RelationshipStat("Jahre", (int)Math.Floor(diff.TotalDays / 365)),
+            new RelationshipStat("Tage", (int)Math.Floor(diff.TotalDays)),
+            new RelationshipStat("Minuten", (int)Math.Floor(diff.TotalMinutes))
+        };
+
+        var heading = string.IsNullOrWhiteSpace(Content.Relationship.Heading)
+            ? "Seit unserem ersten Moment"
+            : Content.Relationship.Heading;
+
+        var meta = $"Seit {start.ToString("d. MMMM yyyy", GermanCulture)}";
+
+        return new RelationshipViewModel(false, heading, Content.Relationship.Subheading, meta, null, null, stats);
+    }
+
+    private void SelectGateAnswer(int questionIndex, int choiceIndex)
+    {
+        _multipleChoiceAnswers[questionIndex] = choiceIndex;
+        _invalidGateQuestions.Remove(questionIndex);
+        _gateError = null;
+    }
+
+    private async Task HandleGateSubmit()
+    {
+        await ValidateGateAsync();
+    }
+
+    private async Task ValidateGateAsync()
+    {
+        if (_activeGateQuestions.Count == 0)
+        {
+            InitializeGateQuestions();
+        }
+
+        if (!AllQuestionsAnswered())
+        {
+            _gateError = "Bitte beantworte alle Fragen.";
+            await ClearPersistedGateAsync();
+            return;
+        }
+
+        _invalidGateQuestions.Clear();
+
+        for (var questionIndex = 0; questionIndex < _activeGateQuestions.Count; questionIndex++)
+        {
+            var question = _activeGateQuestions[questionIndex];
+            var isCorrect = question.Type switch
+            {
+                GateQuestionType.MultipleChoice => _multipleChoiceAnswers.TryGetValue(questionIndex, out var answerIndex) && question.AnswerIndex == answerIndex,
+                GateQuestionType.Text => ValidateTextAnswer(questionIndex, question),
+                _ => false
+            };
+            if (!isCorrect)
+            {
+                _invalidGateQuestions.Add(questionIndex);
+            }
+        }
+
+        if (_invalidGateQuestions.Count == 0)
+        {
+            _gatePassed = true;
+            _gateError = null;
+            await PersistGatePassAsync();
+            await EnsureFavoritesLoadedAsync();
+            return;
+        }
+
+        _gateError = Content.Gate.ErrorMessage;
+        await ClearPersistedGateAsync();
+    }
+
+    private Task HandleHeroCta()
+    {
+        _letterRevealed = true;
+        _pendingScrollToLetter = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task EnsureFavoritesLoadedAsync()
+    {
+        if (_favoritesLoaded || _favoritesLoading)
+        {
+            return;
+        }
+
+        await LoadFavoritePhotosAsync();
+    }
+
+    private async Task LoadFavoritePhotosAsync()
+    {
+        _favoritesLoading = true;
+        _galleryError = null;
+        StateHasChanged();
+
+        try
+        {
+            var favorites = await GalleryService.GetFavoritesAsync(MaxPreloadedFavorites);
+            _favoritePhotos.Clear();
+            _favoritePhotos.AddRange(favorites);
+            _favoritesLoaded = true;
+        }
+        catch
+        {
+            _favoritesLoaded = false;
+            _galleryError = "Konnte die Galerie leider nicht laden.";
+        }
+        finally
+        {
+            _favoritesLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void InitializeGateQuestions()
+    {
+        _activeGateQuestions.Clear();
+        _multipleChoiceAnswers.Clear();
+        _textAnswers.Clear();
+        _invalidGateQuestions.Clear();
+
+        var source = Content.Gate.Questions ?? Array.Empty<GateQuestion>();
+        if (source.Count == 0)
+        {
+            return;
+        }
+
+        IEnumerable<GateQuestion> selection = source;
+        if (source.Count > 2)
+        {
+            selection = source.OrderBy(_ => Random.Shared.Next()).Take(2);
+        }
+
+        _activeGateQuestions.AddRange(selection);
+    }
+
+    private bool AllQuestionsAnswered()
+    {
+        for (var index = 0; index < _activeGateQuestions.Count; index++)
+        {
+            var question = _activeGateQuestions[index];
+            var answered = question.Type switch
+            {
+                GateQuestionType.MultipleChoice => _multipleChoiceAnswers.ContainsKey(index),
+                GateQuestionType.Text => _textAnswers.TryGetValue(index, out var value) && !string.IsNullOrWhiteSpace(value),
+                _ => false
+            };
+
+            if (!answered)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private string GetTextAnswer(int questionIndex) => _textAnswers.TryGetValue(questionIndex, out var value) ? value : string.Empty;
+
+    private void SetTextAnswer(int questionIndex, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _textAnswers.Remove(questionIndex);
+        }
+        else
+        {
+            _textAnswers[questionIndex] = value;
+        }
+
+        _invalidGateQuestions.Remove(questionIndex);
+        _gateError = null;
+    }
+
+    private IReadOnlyList<string> WheelItems => Content.Relationship.WheelItems ?? Array.Empty<string>();
+
+    private bool CanShowWheelButton => _relationshipInfo is not null && _relationshipInfo.IsFuture && Content.Relationship.ShowWheel && WheelItems.Count > 0;
+
+    private void OpenWheelDialog()
+    {
+        if (!CanShowWheelButton)
+        {
+            return;
+        }
+
+        _isWheelDialogOpen = true;
+        _wheelResult = null;
+        _wheelRotation = 0;
+        _wheelSelectedIndex = -1;
+    }
+
+    private void CloseWheelDialog()
+    {
+        _isWheelDialogOpen = false;
+        _wheelResult = null;
+        _wheelRotation = 0;
+        _isWheelSpinning = false;
+    }
+
+    private async Task SpinWheelAsync()
+    {
+        if (_isWheelSpinning || WheelItems.Count == 0)
+        {
+            return;
+        }
+
+        _isWheelSpinning = true;
+        _wheelResult = null;
+        StateHasChanged();
+
+        var targetIndex = Random.Shared.Next(WheelItems.Count);
+        var segmentAngle = 360d / WheelItems.Count;
+        var offset = segmentAngle / 2;
+        var rotations = 5;
+        _wheelRotation = rotations * 360d + targetIndex * segmentAngle + offset;
+        _wheelSelectedIndex = targetIndex;
+
+        await Task.Delay(4500);
+
+        _wheelResult = WheelItems[targetIndex];
+        _isWheelSpinning = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private bool ValidateTextAnswer(int questionIndex, GateQuestion question)
+    {
+        if (!_textAnswers.TryGetValue(questionIndex, out var provided) || string.IsNullOrWhiteSpace(question.AnswerText))
+        {
+            return false;
+        }
+
+        var comparison = question.IsCaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        return string.Equals(provided.Trim(), question.AnswerText.Trim(), comparison);
+    }
+
+    private void OpenLightbox(GalleryPhotoDto item)
+    {
+        _activeGalleryItem = item;
+    }
+
+    private void HandleGalleryKey(KeyboardEventArgs args, GalleryPhotoDto item)
+    {
+        if (args.Key is "Enter" or " ")
+        {
+            OpenLightbox(item);
+        }
+    }
+
+    private void CloseLightbox()
+    {
+        _activeGalleryItem = null;
+    }
+
+    private async Task RestoreGateStateAsync()
+    {
+        if (_gateStateRestored)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await SessionStorage.GetAsync<bool>(GateStorageKey);
+            if (result.Success && result.Value)
+            {
+                _gatePassed = true;
+                _activeGateQuestions.Clear();
+                _multipleChoiceAnswers.Clear();
+                _textAnswers.Clear();
+                await EnsureFavoritesLoadedAsync();
+            }
+        }
+        catch
+        {
+            // storage unavailable, ignore
+        }
+        finally
+        {
+            _gateStateRestored = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task PersistGatePassAsync()
+    {
+        try
+        {
+            await SessionStorage.SetAsync(GateStorageKey, true);
+        }
+        catch
+        {
+            // JS runtime not ready, ignore
+        }
+    }
+
+    private async Task ClearPersistedGateAsync()
+    {
+        try
+        {
+            await SessionStorage.DeleteAsync(GateStorageKey);
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    private void InitializeFloatingHearts()
+    {
+        if (_floatingHearts.Count > 0)
+        {
+            return;
+        }
+
+        var heartCount = 8;
+        for (var i = 0; i < heartCount; i++)
+        {
+            var left = Random.Shared.NextDouble() * 100;
+            var bottom = Random.Shared.NextDouble() * 40;
+            var delay = Random.Shared.NextDouble() * 4;
+            var duration = 10 + Random.Shared.NextDouble() * 6;
+            _floatingHearts.Add(new FloatingHeart(left, bottom, delay, duration));
+        }
+    }
+
+    private void InitializeSongs()
+    {
+        _songs.Clear();
+        for (var i = 0; i < Content.Songs.Items.Count; i++)
+        {
+            var source = Content.Songs.Items[i];
+            var label = $"Song {(i + 1).ToString("D2")}";
+            var titleId = $"song-title-{i}";
+            _songs.Add(new SongViewModel(label, source.Artist, source.Url, titleId));
+        }
+    }
+
+    private async Task LoadSongMetadataAsync()
+    {
+        foreach (var song in _songs)
+        {
+            SpotifyMetadata? metadata = null;
+            try
+            {
+                metadata = await SpotifyMetadataService.GetMetadataAsync(song.Url);
+            }
+            catch
+            {
+                metadata = null;
+            }
+
+            song.UpdateMetadata(metadata);
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string GetHeroAlt()
+    {
+        var caption = _heroImage?.Caption ?? Content.Hero.FeaturedPhoto.Caption;
+        return string.IsNullOrWhiteSpace(caption) ? Content.Hero.Title : caption;
+    }
+
+    private static string FormatPercent(double value) => $"{value.ToString("0.##", CultureInfo.InvariantCulture)}%";
+    private static string FormatPixels(double value) => $"{value.ToString("0.##", CultureInfo.InvariantCulture)}px";
+    private static string FormatSeconds(double value) => $"{value.ToString("0.##", CultureInfo.InvariantCulture)}s";
+
+    private void ScrollToLetter()
+    {
+        Navigation.NavigateTo("#love-letter", forceLoad: false);
+    }
+
+    private sealed record RelationshipViewModel(
+        bool IsFuture,
+        string Heading,
+        string? Subheading,
+        string? Meta,
+        string? FutureTitle,
+        string? FutureText,
+        IReadOnlyList<RelationshipStat> Stats);
+
+    private sealed record RelationshipStat(string Label, int Value);
+
+    private sealed record FloatingHeart(double LeftOffset, double BottomOffset, double DelaySeconds, double DurationSeconds);
+
+    private sealed class SongViewModel
+    {
+        public SongViewModel(string label, string artist, string url, string titleElementId)
+        {
+            Label = label;
+            Artist = artist;
+            Url = url;
+            TitleElementId = titleElementId;
+        }
+
+        public string Label { get; }
+        public string Artist { get; }
+        public string Url { get; }
+        public string TitleElementId { get; }
+        public SpotifyMetadata? Metadata { get; private set; }
+        public string DisplayTitle => Metadata?.Title ?? Label;
+        public string? CoverUrl => Metadata?.ThumbnailUrl;
+        public bool HasCover => !string.IsNullOrWhiteSpace(Metadata?.ThumbnailUrl);
+
+        public void UpdateMetadata(SpotifyMetadata? metadata)
+        {
+            Metadata = metadata;
+        }
+    }
+
+}

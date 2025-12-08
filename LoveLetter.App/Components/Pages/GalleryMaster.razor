@@ -1,0 +1,303 @@
+@page "/gallery/master"
+@using System.ComponentModel.DataAnnotations
+@inject IGalleryService GalleryService
+@inject IBucketListService BucketListService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Galerie verwalten</PageTitle>
+
+<div class="background-glow"></div>
+
+<main class="gallery-master">
+    <section class="gallery-master__header">
+        <h1>Galerie verwalten</h1>
+        <p>Fotos bearbeiten oder löschen. Es wird das Masterpasswort aus der Bucket List verwendet.</p>
+    </section>
+
+    @if (!_isAuthorized)
+    {
+        <EditForm Model="_authForm" OnValidSubmit="AuthorizeAsync" class="gallery-master__auth">
+            <DataAnnotationsValidator />
+            <label>
+                <span>Masterpasswort</span>
+                <InputText @bind-Value="_authForm.Password" type="password" autocomplete="off" placeholder="Masterpasswort eingeben" />
+                <ValidationMessage For="() => _authForm.Password" />
+            </label>
+            <button type="submit" disabled="@_isVerifying">@(_isVerifying ? "Prüfe..." : "Freischalten")</button>
+            @if (!string.IsNullOrWhiteSpace(_statusMessage))
+            {
+                <p class="gallery-master__message">@_statusMessage</p>
+            }
+        </EditForm>
+    }
+    else
+    {
+        <div class="gallery-master__actions">
+            <div class="gallery-master__actions-left">
+                <button type="button" @onclick="LoadPhotosAsync" disabled="@_isLoading">@(_isLoading ? "Lade..." : "Neu laden")</button>
+                <span>@_photos.Count Fotos</span>
+            </div>
+            <div class="gallery-master__actions-right">
+                <button type="button"
+                        class="gallery-master__clear"
+                        disabled="@(!_selectedPhotoIds.Any())"
+                        @onclick="ClearSelection">
+                    Auswahl aufheben
+                </button>
+                <button type="button"
+                        class="gallery-master__export"
+                        disabled="@(!_selectedPhotoIds.Any())"
+                        @onclick="ExportSelectionAsync">
+                    Auswahl als ZIP exportieren (@_selectedPhotoIds.Count)
+                </button>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_statusMessage))
+        {
+            <p class="gallery-master__message">@_statusMessage</p>
+        }
+
+        @if (_isLoading)
+        {
+            <p>Fotos werden geladen...</p>
+        }
+        else if (!_photos.Any())
+        {
+            <p>Noch keine Fotos vorhanden.</p>
+        }
+        else
+        {
+            <div class="gallery-master__grid">
+                @foreach (var photo in _photos)
+                {
+                    <article class="gallery-master__card @(photo.IsFavorite ? "is-favorite" : string.Empty)">
+                        <img src="@(photo.ThumbnailUrl ?? photo.Url)" alt="Admin-Foto" loading="lazy" />
+                        <div class="gallery-master__body">
+                            <div class="gallery-master__select">
+                                <label>
+                                    <input type="checkbox"
+                                           checked="@photo.IsSelected"
+                                           @onchange="args => HandleSelectionChanged(photo, args)" />
+                                    <span>Für Export auswählen</span>
+                                </label>
+                            </div>
+                            <label>
+                                <span>Beschreibung</span>
+                                <InputText @bind-Value="photo.EditedCaption" />
+                            </label>
+                            <div class="gallery-master__buttons">
+                                <button type="button"
+                                        class="gallery-master__save"
+                                        disabled="@photo.IsSaving"
+                                        @onclick="() => SavePhotoAsync(photo)">
+                                    @(photo.IsSaving ? "Speichere..." : "Speichern")
+                                </button>
+                                <button type="button"
+                                        class="gallery-master__delete"
+                                        disabled="@photo.IsDeleting"
+                                        @onclick="() => DeletePhotoAsync(photo)">
+                                    @(photo.IsDeleting ? "Lösche..." : "Löschen")
+                                </button>
+                            </div>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    }
+</main>
+
+@code {
+    private readonly List<GalleryAdminViewModel> _photos = [];
+    private readonly MasterPasswordForm _authForm = new();
+    private readonly HashSet<Guid> _selectedPhotoIds = [];
+    private bool _isAuthorized;
+    private bool _isVerifying;
+    private bool _isLoading;
+    private string? _statusMessage;
+
+    protected override Task OnInitializedAsync() => Task.CompletedTask;
+
+    private async Task AuthorizeAsync()
+    {
+        _statusMessage = null;
+        _isVerifying = true;
+        try
+        {
+            var result = await BucketListService.VerifyMasterPasswordAsync(_authForm.Password);
+            if (result.Success)
+            {
+                _isAuthorized = true;
+                _authForm.Password = string.Empty;
+                await LoadPhotosAsync();
+            }
+            else
+            {
+                _statusMessage = result.Error ?? "Masterpasswort ist ungültig.";
+            }
+        }
+        finally
+        {
+            _isVerifying = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadPhotosAsync()
+    {
+        if (!_isAuthorized)
+        {
+            return;
+        }
+
+        _isLoading = true;
+        _statusMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            _photos.Clear();
+            var items = await GalleryService.GetPhotosAsync();
+            _photos.AddRange(items.Select(item => new GalleryAdminViewModel(item)));
+            _selectedPhotoIds.Clear();
+        }
+        catch
+        {
+            _statusMessage = "Konnte die Galerie nicht laden.";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SavePhotoAsync(GalleryAdminViewModel photo)
+    {
+        if (!_isAuthorized || photo.IsSaving)
+        {
+            return;
+        }
+
+        photo.IsSaving = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await GalleryService.UpdatePhotoAsync(photo.Id, photo.EditedCaption);
+            if (result.Success && result.Value is not null)
+            {
+                photo.Caption = result.Value.Caption;
+                photo.EditedCaption = result.Value.Caption;
+                _statusMessage = "Änderungen gespeichert.";
+            }
+            else
+            {
+                _statusMessage = result.Error ?? "Konnte nicht gespeichert werden.";
+            }
+        }
+        finally
+        {
+            photo.IsSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeletePhotoAsync(GalleryAdminViewModel photo)
+    {
+        if (!_isAuthorized || photo.IsDeleting)
+        {
+            return;
+        }
+
+        photo.IsDeleting = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await GalleryService.DeletePhotoAsync(photo.Id);
+            if (result.Success)
+            {
+                _photos.Remove(photo);
+                _selectedPhotoIds.Remove(photo.Id);
+                _statusMessage = "Foto gelöscht.";
+            }
+            else
+            {
+                _statusMessage = result.Error ?? "Konnte nicht gelöscht werden.";
+            }
+        }
+        finally
+        {
+            photo.IsDeleting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void HandleSelectionChanged(GalleryAdminViewModel photo, ChangeEventArgs args)
+    {
+        var isSelected = args.Value is bool flag && flag;
+        photo.IsSelected = isSelected;
+        if (isSelected)
+        {
+            _selectedPhotoIds.Add(photo.Id);
+        }
+        else
+        {
+            _selectedPhotoIds.Remove(photo.Id);
+        }
+        StateHasChanged();
+    }
+
+    private void ClearSelection()
+    {
+        foreach (var photo in _photos)
+        {
+            photo.IsSelected = false;
+        }
+
+        _selectedPhotoIds.Clear();
+    }
+
+    private async Task ExportSelectionAsync()
+    {
+        if (!_selectedPhotoIds.Any())
+        {
+            return;
+        }
+
+        var query = string.Join("&", _selectedPhotoIds.Select(id => $"ids={id}"));
+        var exportUrl = $"/api/gallery/export?{query}";
+        await JSRuntime.InvokeVoidAsync("window.open", exportUrl, "_blank");
+    }
+
+    private sealed class MasterPasswordForm
+    {
+        [Required]
+        public string Password { get; set; } = string.Empty;
+    }
+
+    private sealed class GalleryAdminViewModel
+    {
+        public GalleryAdminViewModel(GalleryPhotoDto dto)
+        {
+            Id = dto.Id;
+            Url = dto.Url;
+            ThumbnailUrl = dto.ThumbnailUrl;
+            Caption = dto.Caption;
+            EditedCaption = dto.Caption;
+            IsFavorite = dto.IsFavorite;
+        }
+
+        public Guid Id { get; }
+        public string Url { get; }
+        public string? ThumbnailUrl { get; }
+        public bool IsFavorite { get; }
+        public string? Caption { get; set; }
+        public string? EditedCaption { get; set; }
+        public bool IsSaving { get; set; }
+        public bool IsDeleting { get; set; }
+        public bool IsSelected { get; set; }
+    }
+}
