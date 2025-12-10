@@ -473,11 +473,17 @@
         }
 
         var diff = now - start;
+        var years = (int)Math.Floor(diff.TotalDays / 365);
+        var remainingAfterYears = diff - TimeSpan.FromDays(years * 365);
+        var days = remainingAfterYears.Days;
+        var remainingAfterDays = remainingAfterYears - TimeSpan.FromDays(days);
+        var minutes = (int)Math.Floor(remainingAfterDays.TotalMinutes);
+
         var stats = new[]
         {
-            new RelationshipStat("Jahre", (int)Math.Floor(diff.TotalDays / 365)),
-            new RelationshipStat("Tage", (int)Math.Floor(diff.TotalDays)),
-            new RelationshipStat("Minuten", (int)Math.Floor(diff.TotalMinutes))
+            new RelationshipStat("Jahre", years),
+            new RelationshipStat("Tage", days),
+            new RelationshipStat("Minuten", minutes)
         };
 
         var heading = string.IsNullOrWhiteSpace(Content.Relationship.Heading)
