@@ -8,6 +8,7 @@ public class LoveLetterDbContext(DbContextOptions<LoveLetterDbContext> options) 
     public DbSet<BucketListEntry> BucketListEntries => Set<BucketListEntry>();
     public DbSet<BucketListMedia> BucketListMedia => Set<BucketListMedia>();
     public DbSet<GalleryPhoto> GalleryPhotos => Set<GalleryPhoto>();
+    public DbSet<GalleryAlbum> GalleryAlbums => Set<GalleryAlbum>();
 }
 
 public sealed class LoveLetterDbContextFactory : IDesignTimeDbContextFactory<LoveLetterDbContext>

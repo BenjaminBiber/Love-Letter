@@ -11,6 +11,7 @@ public static class GalleryEndpoints
 {
     private const long MaxPhotoBytes = 15 * 1024 * 1024; // 15 MB
     private const int MaxCaptionLength = 160;
+    private const int MaxAlbumLength = 80;
     private const int FavoriteLimit = 6;
     private static readonly string[] AllowedPhotoExtensions = [".png", ".jpg", ".jpeg", ".webp"];
 
@@ -19,6 +20,8 @@ public static class GalleryEndpoints
         var group = app.MapGroup("/api/gallery");
         group.MapGet("/", GetPhotosAsync);
         group.MapGet("/favorites", GetFavoritesAsync);
+        group.MapGet("/albums", GetAlbumsAsync);
+        group.MapPost("/albums", CreateAlbumAsync);
         group.MapGet("/export", ExportPhotosAsync);
         group.MapPost("/", UploadPhotoAsync);
         group.MapPost("/{id:guid}/favorite", SetFavoriteAsync);
@@ -30,6 +33,8 @@ public static class GalleryEndpoints
         var items = await db.GalleryPhotos
             .AsNoTracking()
             .OrderByDescending(p => p.IsFavorite)
+            .ThenBy(p => string.IsNullOrWhiteSpace(p.Album))
+            .ThenBy(p => p.Album)
             .ThenByDescending(p => p.FavoritedAt ?? p.CreatedAt)
             .ThenByDescending(p => p.CreatedAt)
             .Select(p => p.ToDto())
@@ -52,6 +57,125 @@ public static class GalleryEndpoints
         return TypedResults.Ok(favorites);
     }
 
+    private static async Task<Ok<List<GalleryAlbumDto>>> GetAlbumsAsync(LoveLetterDbContext db)
+    {
+        var photos = await db.GalleryPhotos.AsNoTracking().ToListAsync();
+        var albums = await db.GalleryAlbums.AsNoTracking().OrderBy(a => a.CreatedAt).ToListAsync();
+
+        var result = new List<GalleryAlbumDto>();
+        foreach (var album in albums)
+        {
+            var albumPhotos = photos.Where(p => string.Equals(p.Album, album.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+            var cover = albumPhotos.OrderByDescending(p => p.CreatedAt).FirstOrDefault();
+            result.Add(new GalleryAlbumDto
+            {
+                Id = album.Id,
+                Name = album.Name,
+                PhotoCount = albumPhotos.Count,
+                CoverUrl = cover?.PhotoUrl,
+                CoverThumbnailUrl = cover?.ThumbnailUrl,
+                IsFavorite = false,
+                IsUnassigned = false
+            });
+        }
+
+        var usedAlbumNames = new HashSet<string>(albums.Select(a => a.Name), StringComparer.OrdinalIgnoreCase);
+        var photoAlbumNames = photos
+            .Where(p => !string.IsNullOrWhiteSpace(p.Album))
+            .Select(p => p.Album!)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var name in photoAlbumNames)
+        {
+            if (usedAlbumNames.Contains(name))
+            {
+                continue;
+            }
+
+            var albumPhotos = photos.Where(p => string.Equals(p.Album, name, StringComparison.OrdinalIgnoreCase)).ToList();
+            var cover = albumPhotos.OrderByDescending(p => p.CreatedAt).FirstOrDefault();
+            result.Add(new GalleryAlbumDto
+            {
+                Id = null,
+                Name = name,
+                PhotoCount = albumPhotos.Count,
+                CoverUrl = cover?.PhotoUrl,
+                CoverThumbnailUrl = cover?.ThumbnailUrl,
+                IsFavorite = false,
+                IsUnassigned = false
+            });
+        }
+
+        var unassigned = photos.Where(p => string.IsNullOrWhiteSpace(p.Album)).ToList();
+        if (unassigned.Count > 0)
+        {
+            var cover = unassigned.OrderByDescending(p => p.CreatedAt).FirstOrDefault();
+            result.Add(GalleryAlbumDto.FromUnassigned(unassigned.Count, cover));
+        }
+
+        var favorites = photos.Where(p => p.IsFavorite).ToList();
+        if (favorites.Count > 0)
+        {
+            var cover = favorites.OrderByDescending(p => p.FavoritedAt ?? p.CreatedAt).FirstOrDefault();
+            result.Insert(0, GalleryAlbumDto.FromFavorite("Favoriten", favorites.Count, cover));
+        }
+
+        var ordered = result
+            .OrderBy(a => a.IsFavorite ? 0 : a.IsUnassigned ? 2 : 1)
+            .ThenBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return TypedResults.Ok(ordered);
+    }
+
+    private static async Task<IResult> CreateAlbumAsync(CreateAlbumRequest request, LoveLetterDbContext db)
+    {
+        var normalized = NormalizeAlbum(request.Name);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return TypedResults.BadRequest("Albumnamen bitte ausfuellen.");
+        }
+
+        if (normalized.Length > MaxAlbumLength)
+        {
+            return TypedResults.BadRequest("Bitte maximal 80 Zeichen fuer den Albumnamen verwenden.");
+        }
+
+        if (IsReservedAlbumName(normalized))
+        {
+            return TypedResults.BadRequest("Dieser Albumnamen ist reserviert.");
+        }
+
+        var exists = await db.GalleryAlbums.AnyAsync(a => a.Name.ToLower() == normalized.ToLower());
+        var photoUsesName = await db.GalleryPhotos.AnyAsync(p => p.Album != null && p.Album.ToLower() == normalized.ToLower());
+
+        if (exists || photoUsesName)
+        {
+            return TypedResults.BadRequest("Ein Album mit diesem Namen existiert bereits.");
+        }
+
+        var album = new GalleryAlbum
+        {
+            Id = Guid.NewGuid(),
+            Name = normalized,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        db.GalleryAlbums.Add(album);
+        await db.SaveChangesAsync();
+
+        return TypedResults.Ok(new GalleryAlbumDto
+        {
+            Id = album.Id,
+            Name = album.Name,
+            PhotoCount = 0,
+            CoverUrl = null,
+            CoverThumbnailUrl = null,
+            IsFavorite = false,
+            IsUnassigned = false
+        });
+    }
+
     private static async Task<IResult> UploadPhotoAsync(
         HttpRequest request,
         LoveLetterDbContext db,
@@ -59,33 +183,45 @@ public static class GalleryEndpoints
     {
         if (!request.HasFormContentType)
         {
-            return TypedResults.BadRequest("Ungültiges Formular.");
+            return TypedResults.BadRequest("Ungueltiges Formular.");
         }
 
         var form = await request.ReadFormAsync();
         var file = form.Files["photo"];
         var captionValue = form["caption"].ToString();
         var caption = string.IsNullOrWhiteSpace(captionValue) ? null : captionValue.Trim();
+        var albumValue = form["album"].ToString();
+        var album = NormalizeAlbum(albumValue);
 
         if (file is null || file.Length == 0)
         {
-            return TypedResults.BadRequest("Bitte wähle ein Foto aus.");
+            return TypedResults.BadRequest("Bitte waehle ein Foto aus.");
         }
 
         if (caption is not null && caption.Length > MaxCaptionLength)
         {
-            return TypedResults.BadRequest($"Bitte verwende maximal {MaxCaptionLength} Zeichen für die Bildbeschreibung.");
+            return TypedResults.BadRequest($"Bitte verwende maximal {MaxCaptionLength} Zeichen fuer die Bildbeschreibung.");
+        }
+
+        if (album is not null && album.Length > MaxAlbumLength)
+        {
+            return TypedResults.BadRequest($"Bitte verwende maximal {MaxAlbumLength} Zeichen fuer den Albumnamen.");
+        }
+
+        if (album is not null && IsReservedAlbumName(album))
+        {
+            return TypedResults.BadRequest("Dieser Albumnamen ist reserviert.");
         }
 
         if (file.Length > MaxPhotoBytes)
         {
-            return TypedResults.BadRequest("Das Foto ist zu groß (maximal 15 MB).");
+            return TypedResults.BadRequest("Das Foto ist zu gross (maximal 15 MB).");
         }
 
         var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!AllowedPhotoExtensions.Contains(extension))
         {
-            return TypedResults.BadRequest("Nur PNG, JPG oder WEBP werden unterstützt.");
+            return TypedResults.BadRequest("Nur PNG, JPG oder WEBP werden unterstuetzt.");
         }
 
         var fileName = $"{Guid.NewGuid()}{extension}";
@@ -106,10 +242,16 @@ public static class GalleryEndpoints
         {
             Id = Guid.NewGuid(),
             Caption = string.IsNullOrWhiteSpace(caption) ? null : caption,
+            Album = album,
             FilePath = relativePath,
             OriginalFileName = file.FileName,
             CreatedAt = DateTime.UtcNow
         };
+
+        if (album is not null)
+        {
+            await EnsureAlbumExistsAsync(db, album);
+        }
 
         db.GalleryPhotos.Add(photo);
         await db.SaveChangesAsync();
@@ -163,7 +305,7 @@ public static class GalleryEndpoints
     {
         if (ids is null || ids.Length == 0)
         {
-            return TypedResults.BadRequest("Bitte wähle mindestens ein Foto aus.");
+            return TypedResults.BadRequest("Bitte waehle mindestens ein Foto aus.");
         }
 
         var requestedIds = ids.Distinct().ToArray();
@@ -219,6 +361,37 @@ public static class GalleryEndpoints
         return TypedResults.File(archiveStream, "application/zip", downloadName);
     }
 
+    private static string? NormalizeAlbum(string? album)
+    {
+        if (string.IsNullOrWhiteSpace(album))
+        {
+            return null;
+        }
+
+        return album.Trim();
+    }
+
+    private static bool IsReservedAlbumName(string album)
+    {
+        return string.Equals(album, GalleryPhoto.UnassignedAlbumName, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(album, "Favoriten", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task EnsureAlbumExistsAsync(LoveLetterDbContext db, string album)
+    {
+        var exists = await db.GalleryAlbums.AnyAsync(a => a.Name.ToLower() == album.ToLower());
+        if (!exists)
+        {
+            db.GalleryAlbums.Add(new GalleryAlbum
+            {
+                Id = Guid.NewGuid(),
+                Name = album,
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+    }
+
     private static string? ResolvePhotoPath(string webRoot, string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -253,4 +426,6 @@ public static class GalleryEndpoints
 
         return name;
     }
+
+    private sealed record CreateAlbumRequest(string Name);
 }

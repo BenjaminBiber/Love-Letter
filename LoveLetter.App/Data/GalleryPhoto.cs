@@ -5,10 +5,15 @@ namespace LoveLetter.App.Data;
 
 public class GalleryPhoto
 {
+    public const string UnassignedAlbumName = "Nicht zugeordnet";
+
     public Guid Id { get; set; }
 
     [MaxLength(160)]
     public string? Caption { get; set; }
+
+    [MaxLength(80)]
+    public string? Album { get; set; }
 
     [MaxLength(256)]
     public string? OriginalFileName { get; set; }
@@ -24,6 +29,9 @@ public class GalleryPhoto
     public bool IsFavorite { get; set; }
 
     public DateTime? FavoritedAt { get; set; }
+
+    [NotMapped]
+    public string AlbumOrDefault => string.IsNullOrWhiteSpace(Album) ? UnassignedAlbumName : Album;
 
     [NotMapped]
     public string PhotoUrl => FilePath.StartsWith("/", StringComparison.Ordinal)

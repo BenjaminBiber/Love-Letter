@@ -3,6 +3,7 @@ using System;
 using LoveLetter.App.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace LoveLetter.App.Migrations
 {
     [DbContext(typeof(LoveLetterDbContext))]
-    partial class LoveLetterDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251210065917_AddGalleryAlbums")]
+    partial class AddGalleryAlbums
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.0-preview.6.24327.4");
@@ -89,25 +92,6 @@ namespace LoveLetter.App.Migrations
                     b.HasIndex("EntryId");
 
                     b.ToTable("BucketListMedia");
-                });
-
-            modelBuilder.Entity("LoveLetter.App.Data.GalleryAlbum", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("GalleryAlbums");
                 });
 
             modelBuilder.Entity("LoveLetter.App.Data.GalleryPhoto", b =>

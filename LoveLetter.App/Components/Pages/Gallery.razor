@@ -1,26 +1,19 @@
 @page "/gallery"
+@page "/gallery/album/{AlbumName?}"
 @using System.ComponentModel.DataAnnotations
 @using System.IO
 @using System.Linq
+@using LoveLetter.App.Data
 @inject IGalleryService GalleryService
+@inject IBucketListService BucketListService
+@inject NavigationManager NavigationManager
 
 <PageTitle>Galerie</PageTitle>
 
 <div class="background-glow"></div>
 
-<main class="gallery-page">
-    <section class="gallery-page__header">
-        <div>
-            <p class="section-eyebrow">Galerie</p>
-            <h1>Alle unsere Momente</h1>
-            <p class="section-subtext">Markiere bis zu @FavoriteLimit Favoriten. Diese tauchen automatisch auf der Startseite auf.</p>
-        </div>
-        <div class="gallery-page__actions">
-            <button class="gallery-page__add-btn" type="button" @onclick="OpenAddDialog">Bild hinzufügen</button>
-            <span class="gallery-page__hint">@FavoriteCount / @FavoriteLimit Favoriten</span>
-        </div>
-    </section>
-
+<main class="gallery-page" style="@(_activeAlbum is not null ? "padding-top: 1rem;" : "")">
+  
     @if (!string.IsNullOrWhiteSpace(_pageMessage))
     {
         <p class="gallery-page__message">@_pageMessage</p>
@@ -30,45 +23,135 @@
     {
         <p class="gallery-page__empty">Lade deine Galerie...</p>
     }
-    else if (!_photos.Any())
+    else if (_activeAlbum is null)
     {
-        <div class="gallery-page__empty">
-            <p>Noch keine Bilder vorhanden.</p>
-            <button type="button" class="gallery-page__add-btn" @onclick="OpenAddDialog">Jetzt das erste hochladen</button>
-        </div>
-    }
-    else
-    {
-        <div class="gallery-page__grid">
-            @foreach (var photo in _photos)
+        <section class="gallery-page__header">
+            <div>
+                <p class="section-eyebrow">Galerie</p>
+                <h1>@(_activeAlbum is null ? "Alben" : _activeAlbum.Name)</h1>
+            </div>
+            <div class="gallery-page__actions d-flex flex-row justify-content-center gap-4 align-items-center">
+                <button class="gallery-page__add-btn" type="button" @onclick="OpenCreateAlbumDialog">Neues Album</button>
+                <button class="gallery-page__add-btn" type="button" @onclick="OpenAddDialog">Bild hochladen</button>
+                <span class="gallery-page__hint">@FavoriteCount / @FavoriteLimit Favoriten</span>
+            </div>
+        </section>
+
+        
+        <div class="gallery-page__albums">
+            @if (!_albums.Any())
             {
-                <article class="gallery-card gallery-page__card @(photo.IsFavorite ? "is-favorite" : string.Empty)">
-                    <div class="gallery-card__image">
-                        <button type="button"
-                                class="gallery-card__preview"
-                                @onclick="() => OpenPhotoOverlay(photo)"
-                                aria-label="Foto in voller Größe anzeigen">
-                            <img src="@(photo.ThumbnailUrl ?? photo.Url)" alt="@(!string.IsNullOrWhiteSpace(photo.Caption) ? photo.Caption : "Galeriebild")" loading="lazy" />
-                        </button>
-                        <button class="gallery-card__favorite-toggle @(photo.IsFavorite ? "is-active" : string.Empty)"
-                                type="button"
-                                aria-pressed="@photo.IsFavorite"
-                                aria-label="@(photo.IsFavorite ? "Favorit entfernen" : "Als Favorit markieren")"
-                                title="@(photo.IsFavorite ? "Favorit entfernen" : "Als Favorit markieren")"
-                                disabled="@IsFavoriteBusy(photo.Id)"
-                                @onclick="() => ToggleFavoriteAsync(photo)">
-                            <span aria-hidden="true">★</span>
-                        </button>
-                    </div>
-                    @if (!string.IsNullOrWhiteSpace(photo.Caption))
+                <div class="gallery-page__empty">
+                    <p>Noch keine Alben vorhanden.</p>
+                    <button type="button" class="gallery-page__add-btn" @onclick="OpenCreateAlbumDialog">Jetzt ein Album anlegen</button>
+                </div>
+            }
+            else
+            {
+                <div class="album-grid">
+                    @foreach (var album in _albums)
                     {
-                        <div class="gallery-card__body">
-                            <p class="gallery-card__caption">@photo.Caption</p>
-                        </div>
+                        <article style="cursor: pointer" @onclick="() => OpenAlbum(album)" class="album-card @(album.IsFavorite ? "album-card--favorite" : album.IsUnassigned ? "album-card--unassigned" : string.Empty)">
+                            <button type="button" class="album-card__cover" @onclick="() => OpenAlbum(album)">
+                                @if (!string.IsNullOrWhiteSpace(album.CoverThumbnailUrl ?? album.CoverUrl))
+                                {
+                                    <img src="@(album.CoverThumbnailUrl ?? album.CoverUrl)" alt="Album Cover" loading="lazy" />
+                                }
+                                else
+                                {
+                                    <div class="album-card__placeholder">
+                                        <span>Kein Cover</span>
+                                    </div>
+                                }
+                            </button>
+                            <div class="album-card__body">
+                                <div class="album-card__title">
+                                    <h3>@album.Name</h3>
+                                </div>
+                                <p class="album-card__count">@album.PhotoCount @(album.PhotoCount == 1 ? "Foto" : "Fotos")</p>
+                            </div>
+                        </article>
                     }
-                </article>
+                </div>
             }
         </div>
+    }
+
+    @if (_activeAlbum is not null)
+    {
+        var albumPhotos = GetPhotosForActiveAlbum();
+        <section class="album-detail" style="border-top: none; margin-top: 0;">
+            <div class="album-detail__head">
+                <div>
+                    <p class="section-eyebrow">Album</p>
+                    <h2>@_activeAlbum.Name</h2>
+                    <p class="section-subtext">@albumPhotos.Count @(albumPhotos.Count == 1 ? "Foto" : "Fotos")</p>
+                </div>
+                <div class="album-detail__actions">
+                    <button type="button" class="gallery-page__add-btn" @onclick="CloseAlbum">Zur Albenübersicht</button>
+                </div>
+            </div>
+
+            @if (!albumPhotos.Any())
+            {
+                <div class="gallery-page__empty">
+                    <p>Keine Fotos in diesem Album.</p>
+                    <button type="button" class="gallery-page__add-btn" @onclick="OpenAddDialog">Fotos hinzufügen</button>
+                </div>
+            }
+            else
+            {
+                <div class="gallery-page__grid">
+                    @foreach (var photo in albumPhotos)
+                    {
+                        <article class="gallery-card gallery-page__card @(photo.IsFavorite ? "is-favorite" : string.Empty)">
+                            <div class="gallery-card__image">
+                                    <button type="button"
+                                            class="gallery-card__preview"
+                                            @onclick="() => OpenPhotoOverlay(photo)"
+                                            aria-label="Foto in voller Grösse anzeigen">
+                                        <img src="@(photo.ThumbnailUrl ?? photo.Url)" alt="@(!string.IsNullOrWhiteSpace(photo.Caption) ? photo.Caption : "Galeriebild")" loading="lazy" />
+                                    </button>
+                                        <div class="gallery-card__menu">
+                                            <button type="button"
+                                                    class="gallery-card__menu-btn"
+                                                    aria-haspopup="true"
+                                                    aria-expanded="@(_openMenuPhotoId == photo.Id)"
+                                                    @onclick="() => ToggleMenu(photo.Id)">
+                                                &#8942;
+                                            </button>
+                                            @if (_openMenuPhotoId == photo.Id)
+                                            {
+                                                <div class="gallery-card__menu-list">
+                                                    <button type="button"
+                                                            @onclick="() => HandleFavoriteMenuAsync(photo)">
+                                                        @(photo.IsFavorite ? "Favorit entfernen" : "Als Favorit markieren")
+                                                    </button>
+                                                    <button type="button"
+                                                            @onclick="() => OpenMoveDialog(photo)">
+                                                        Verschieben...
+                                                    </button>
+                                                    <button type="button"
+                                                            @onclick="() => OpenEditDialog(photo)">
+                                                        Bearbeiten/Löschen
+                                                    </button>
+                                                </div>
+                                            }
+                                        </div>
+                                </div>
+                                <div class="gallery-card__body">
+                                    <div class="gallery-card__meta d-flex justify-content-center align-items-center">
+                                        @if (!string.IsNullOrWhiteSpace(photo.Caption))
+                                        {
+                                            <p class="gallery-card__caption">@photo.Caption</p>
+                                        }
+                                    </div>
+                                </div>
+                            </article>
+                        }
+                </div>
+            }
+        </section>
     }
 </main>
 
@@ -80,10 +163,17 @@
              @onclick:stopPropagation="true">
             <button type="button"
                     class="gallery-photo-overlay__close"
-                    aria-label="Foto schließen"
+                    aria-label="Foto schliessen"
                     @onclick="ClosePhotoOverlay">
-                ✕
+                &times;
             </button>
+            <div class="gallery-photo-overlay__meta">
+                <span class="gallery-photo-overlay__album">@GetAlbumName(_activePhoto)</span>
+                @if (_activePhoto.IsFavorite)
+                {
+                    <span class="gallery-photo-overlay__favorite">Favorit</span>
+                }
+            </div>
             <img src="@_activePhoto.Url" alt="@_activePhoto.Caption" class="gallery-photo-overlay__image" />
             @if (!string.IsNullOrWhiteSpace(_activePhoto.Caption))
             {
@@ -98,22 +188,42 @@
     <div class="gallery-dialog" role="dialog" aria-modal="true" @onclick="CloseAddDialog">
         <div class="gallery-dialog__content" @onclick:stopPropagation="true">
             <header class="gallery-dialog__header">
-                <h2>Neues Bild hinzufügen</h2>
-                <button class="gallery-dialog__close" type="button" aria-label="Dialog schließen" @onclick="CloseAddDialog">✕</button>
+                <h2>Neues Bild hinzufuegen</h2>
+                <button class="gallery-dialog__close" type="button" aria-label="Dialog schliessen" @onclick="CloseAddDialog">&times;</button>
             </header>
             <EditForm Model="_newPhotoForm" OnValidSubmit="SubmitPhotoAsync">
                 <DataAnnotationsValidator />
                 <div class="gallery-dialog__form">
                     <label class="gallery-dialog__field">
                         <span>Beschreibung (optional)</span>
-                        <InputText class="gallery-dialog__input" @bind-Value="_newPhotoForm.Caption" placeholder="Wie heißt dieser Moment?" />
+                        <InputText class="gallery-dialog__input" @bind-Value="_newPhotoForm.Caption" placeholder="Wie heisst dieser Moment?" />
                         <ValidationMessage For="() => _newPhotoForm.Caption" />
+                    </label>
+
+                    <label class="gallery-dialog__field">
+                        <span>Album</span>
+                        <select class="gallery-dialog__select" @onchange="HandleAlbumChoiceChanged">
+                            <option value="">Nicht zugeordnet</option>
+                            @foreach (var album in _albumOptions)
+                            {
+                                <option value="@album" selected="@(_newPhotoForm.Album == album && !_useNewAlbumForUpload)">@album</option>
+                            }
+                            <option value="__new__" selected="@_useNewAlbumForUpload">Neues Album anlegen...</option>
+                        </select>
+                        @if (_useNewAlbumForUpload)
+                        {
+                            <InputText class="gallery-dialog__input"
+                                       @bind-Value="_newAlbumNameForUpload"
+                                       placeholder="Neuer Albumname (max. 80 Zeichen)" />
+                        }
+                        <small>Leer lassen, dann landet das Foto in "@UnassignedAlbum".</small>
+                        <ValidationMessage For="() => _newPhotoForm.Album" />
                     </label>
 
                     <div class="gallery-dialog__field">
                         <span>Fotos</span>
                         <label class="gallery-dialog__file-btn">
-                            <span>@(_newPhotoFiles.Count == 0 ? "Fotos auswählen" : "Weitere Fotos wählen")</span>
+                            <span>@(_newPhotoFiles.Count == 0 ? "Fotos auswaehlen" : "Weitere Fotos auswaehlen")</span>
                             <InputFile accept="image/*" multiple class="gallery-dialog__file-input" OnChange="HandleNewPhotosSelected" />
                         </label>
                         <small>@GetSelectedFilesLabel()</small>
@@ -147,22 +257,148 @@
     </div>
 }
 
+@if (_isCreateAlbumOpen)
+{
+    <div class="gallery-dialog" role="dialog" aria-modal="true" @onclick="CloseCreateAlbumDialog">
+        <div class="gallery-dialog__content" @onclick:stopPropagation="true">
+            <header class="gallery-dialog__header">
+                <h2>Album erstellen</h2>
+                <button class="gallery-dialog__close" type="button" aria-label="Dialog schliessen" @onclick="CloseCreateAlbumDialog">&times;</button>
+            </header>
+            <EditForm Model="_newAlbumForm" OnValidSubmit="CreateAlbumAsync">
+                <DataAnnotationsValidator />
+                <div class="gallery-dialog__form">
+                    <label class="gallery-dialog__field">
+                        <span>Name</span>
+                        <InputText class="gallery-dialog__input" @bind-Value="_newAlbumForm.Name" placeholder="z.B. Sommer 2024" />
+                        <ValidationMessage For="() => _newAlbumForm.Name" />
+                    </label>
+                    @if (!string.IsNullOrWhiteSpace(_dialogMessage))
+                    {
+                        <p class="gallery-dialog__message">@_dialogMessage</p>
+                    }
+                    <div class="gallery-dialog__actions">
+                        <button type="submit" class="gallery-dialog__submit" disabled="@_isSavingAlbum">@( _isSavingAlbum ? "Speichere..." : "Anlegen")</button>
+                        <button type="button" class="gallery-dialog__cancel" @onclick="CloseCreateAlbumDialog">Abbrechen</button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (_isMoveDialogOpen)
+{
+    <div class="gallery-dialog" role="dialog" aria-modal="true" @onclick="CloseMoveDialog">
+        <div class="gallery-dialog__content" @onclick:stopPropagation="true">
+            <header class="gallery-dialog__header">
+                <h2>Foto verschieben</h2>
+                <button class="gallery-dialog__close" type="button" aria-label="Dialog schliessen" @onclick="CloseMoveDialog">&times;</button>
+            </header>
+            <div class="gallery-dialog__form">
+                <label class="gallery-dialog__field">
+                    <span>Ziel-Album</span>
+                    <select class="gallery-dialog__select" @bind="_moveSelection">
+                        <option value="">Nicht zugeordnet</option>
+                        @foreach (var option in _albumOptions)
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                </label>
+                @if (!string.IsNullOrWhiteSpace(_moveDialogMessage))
+                {
+                    <p class="gallery-dialog__message">@_moveDialogMessage</p>
+                }
+                <div class="gallery-dialog__actions">
+                    <button type="button" class="gallery-dialog__submit" @onclick="ConfirmMoveAsync">Verschieben</button>
+                    <button type="button" class="gallery-dialog__cancel" @onclick="CloseMoveDialog">Abbrechen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_isEditDialogOpen && _editPhoto is not null)
+{
+    <div class="gallery-dialog" role="dialog" aria-modal="true" @onclick="CloseEditDialog">
+        <div class="gallery-dialog__content" @onclick:stopPropagation="true">
+            <header class="gallery-dialog__header">
+                <h2>Foto bearbeiten</h2>
+                <button class="gallery-dialog__close" type="button" aria-label="Dialog schliessen" @onclick="CloseEditDialog">&times;</button>
+            </header>
+            <div class="gallery-dialog__form">
+                <label class="gallery-dialog__field">
+                    <span>Beschreibung</span>
+                    <InputText class="gallery-dialog__input" @bind-Value="_editCaption" placeholder="Beschreibung anpassen" />
+                </label>
+                <label class="gallery-dialog__field">
+                    <span>Masterpasswort zum Löschen</span>
+                    <InputText class="gallery-dialog__input" type="password" @bind-Value="_editMasterPassword" placeholder="Nur fuer Löschen erforderlich" />
+                </label>
+                @if (!string.IsNullOrWhiteSpace(_editDialogMessage))
+                {
+                    <p class="gallery-dialog__message">@_editDialogMessage</p>
+                }
+                <div class="gallery-dialog__actions d-flex align-items-center justify-content-evenly flex-row">
+                    <button type="button"
+                            class="gallery-dialog__delete"
+                            disabled="@_isDeletingPhoto"
+                            @onclick="DeletePhotoAsync">
+                        @(_isDeletingPhoto ? "Lösche..." : "Endgueltig löschen")
+                    </button>
+                    <button type="button" class="gallery-dialog__submit" disabled="@_isUpdatingPhoto" @onclick="SaveEditAsync">
+                        @(_isUpdatingPhoto ? "Speichere..." : "Speichern")
+                    </button>
+                    <button type="button" class="gallery-dialog__cancel" @onclick="CloseEditDialog">Schliessen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private const long MaxPhotoBytes = 15 * 1024 * 1024;
+    private const string UnassignedAlbum = GalleryPhoto.UnassignedAlbumName;
+
+    [Parameter]
+    public string? AlbumName { get; set; }
 
     private readonly List<GalleryPhotoDto> _photos = [];
+    private readonly List<GalleryAlbumDto> _albums = [];
+    private readonly List<string> _albumOptions = [];
+    private readonly Dictionary<Guid, string?> _albumSelections = new();
+    private GalleryAlbumDto? _activeAlbum;
     private GalleryPhotoDto? _activePhoto;
     private readonly HashSet<Guid> _favoriteBusy = [];
+    private Guid? _openMenuPhotoId;
+    private bool _isMoveDialogOpen;
+    private Guid? _movePhotoId;
+    private string? _moveSelection;
+    private string? _moveDialogMessage;
+    private bool _useNewAlbumForUpload;
+    private string? _newAlbumNameForUpload;
+    private bool _isEditDialogOpen;
+    private GalleryPhotoDto? _editPhoto;
+    private string? _editCaption;
+    private string? _editDialogMessage;
+    private string? _editMasterPassword;
+    private bool _isUpdatingPhoto;
+    private bool _isDeletingPhoto;
 
     private bool _isLoading;
     private bool _isDialogOpen;
     private bool _isSaving;
+    private bool _isSavingAlbum;
+    private bool _isCreateAlbumOpen;
     private string? _pageMessage;
     private string? _dialogMessage;
     private int _uploadProgressTotal;
     private int _uploadProgressProcessed;
+    private bool _isInitialized;
 
     private AddPhotoFormModel _newPhotoForm = new();
+    private NewAlbumForm _newAlbumForm = new();
     private readonly List<IBrowserFile> _newPhotoFiles = new();
 
     private int FavoriteCount => _photos.Count(p => p.IsFavorite);
@@ -170,10 +406,20 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadPhotosAsync();
+        await LoadDataAsync();
+        _isInitialized = true;
+        await ApplyRouteAlbumAsync();
     }
 
-    private async Task LoadPhotosAsync()
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_isInitialized)
+        {
+            await ApplyRouteAlbumAsync();
+        }
+    }
+
+    private async Task LoadDataAsync()
     {
         _isLoading = true;
         _pageMessage = null;
@@ -182,8 +428,18 @@
         try
         {
             _photos.Clear();
+            _albums.Clear();
+            _albumSelections.Clear();
+
             var photos = await GalleryService.GetPhotosAsync();
             _photos.AddRange(photos);
+            _photos.Sort(GallerySort);
+
+            var albums = await GalleryService.GetAlbumsAsync();
+            _albums.AddRange(albums);
+
+            RebuildAlbumOptions();
+            await ApplyRouteAlbumAsync();
         }
         catch
         {
@@ -196,6 +452,103 @@
         }
     }
 
+    private void RebuildAlbumOptions()
+    {
+        _albumOptions.Clear();
+        var names = _albums
+            .Where(a => !a.IsFavorite && !a.IsUnassigned)
+            .Select(a => a.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(a => a, StringComparer.OrdinalIgnoreCase);
+
+        _albumOptions.AddRange(names);
+    }
+
+    private void OpenCreateAlbumDialog()
+    {
+        _newAlbumForm = new NewAlbumForm();
+        _dialogMessage = null;
+        _isCreateAlbumOpen = true;
+    }
+
+    private void CloseCreateAlbumDialog()
+    {
+        _isCreateAlbumOpen = false;
+        _dialogMessage = null;
+        _newAlbumForm = new NewAlbumForm();
+    }
+
+    private async Task CreateAlbumAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newAlbumForm.Name))
+        {
+            _dialogMessage = "Bitte Albumnamen eingeben.";
+            return;
+        }
+
+        _isSavingAlbum = true;
+        _dialogMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await GalleryService.CreateAlbumAsync(_newAlbumForm.Name);
+            if (result.Success && result.Value is not null)
+            {
+                _albums.Add(result.Value);
+                RebuildAlbumOptions();
+                _pageMessage = "Album erstellt.";
+                CloseCreateAlbumDialog();
+            }
+            else
+            {
+                _dialogMessage = result.Error ?? "Album konnte nicht erstellt werden.";
+            }
+        }
+        finally
+        {
+            _isSavingAlbum = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OpenAlbum(GalleryAlbumDto album)
+    {
+        var target = Uri.EscapeDataString(album.Name);
+        NavigationManager.NavigateTo($"/gallery/album/{target}", forceLoad: false);
+    }
+
+    private void CloseAlbum()
+    {
+        NavigationManager.NavigateTo("/gallery", forceLoad: false);
+    }
+
+    private List<GalleryPhotoDto> GetPhotosForActiveAlbum()
+    {
+        if (_activeAlbum is null)
+        {
+            return [];
+        }
+
+        IEnumerable<GalleryPhotoDto> query = _photos;
+        if (_activeAlbum.IsFavorite)
+        {
+            query = query.Where(p => p.IsFavorite);
+        }
+        else if (_activeAlbum.IsUnassigned)
+        {
+            query = query.Where(p => string.IsNullOrWhiteSpace(p.Album));
+        }
+        else
+        {
+            query = query.Where(p => string.Equals(p.Album, _activeAlbum.Name, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var result = query.ToList();
+        result.Sort(GallerySort);
+        return result;
+    }
+
     private void OpenAddDialog()
     {
         _dialogMessage = null;
@@ -203,6 +556,12 @@
         _newPhotoFiles.Clear();
         _uploadProgressTotal = 0;
         _uploadProgressProcessed = 0;
+        _newPhotoForm = new AddPhotoFormModel
+        {
+            Album = _activeAlbum is { IsFavorite: false, IsUnassigned: false } ? _activeAlbum.Name : null
+        };
+        _useNewAlbumForUpload = false;
+        _newAlbumNameForUpload = null;
     }
 
     private void CloseAddDialog()
@@ -210,6 +569,8 @@
         _isDialogOpen = false;
         _dialogMessage = null;
         _newPhotoForm = new AddPhotoFormModel();
+        _useNewAlbumForUpload = false;
+        _newAlbumNameForUpload = null;
         _newPhotoFiles.Clear();
         _uploadProgressTotal = 0;
         _uploadProgressProcessed = 0;
@@ -217,6 +578,7 @@
 
     private void OpenPhotoOverlay(GalleryPhotoDto photo)
     {
+        CloseMenus();
         _activePhoto = photo;
     }
 
@@ -239,21 +601,21 @@
         var oversized = files.FirstOrDefault(file => file.Size > MaxPhotoBytes);
         if (oversized is not null)
         {
-            _dialogMessage = $"\"{oversized.Name}\" ist zu groß (maximal 15 MB).";
+            _dialogMessage = $"\"{oversized.Name}\" ist zu gross (maximal 15 MB).";
             return;
         }
 
         _newPhotoFiles.AddRange(files);
         _dialogMessage = _newPhotoFiles.Count == 1
-            ? $"{_newPhotoFiles[0].Name} ausgewählt."
-            : $"{_newPhotoFiles.Count} Dateien ausgewählt.";
+            ? $"{_newPhotoFiles[0].Name} ausgewaehlt."
+            : $"{_newPhotoFiles.Count} Dateien ausgewaehlt.";
     }
 
     private string GetSelectedFilesLabel()
     {
         if (_newPhotoFiles.Count == 0)
         {
-            return "Noch kein Foto ausgewählt";
+            return "Noch kein Foto ausgewaehlt";
         }
 
         if (_newPhotoFiles.Count == 1)
@@ -274,8 +636,24 @@
     {
         if (_newPhotoFiles.Count == 0)
         {
-            _dialogMessage = "Bitte wähle mindestens ein Foto aus.";
+            _dialogMessage = "Bitte waehle mindestens ein Foto aus.";
             return;
+        }
+
+        var targetAlbum = _useNewAlbumForUpload ? _newAlbumNameForUpload : _newPhotoForm.Album;
+        if (_useNewAlbumForUpload)
+        {
+            if (string.IsNullOrWhiteSpace(_newAlbumNameForUpload))
+            {
+                _dialogMessage = "Bitte einen neuen Albumnamen angeben.";
+                return;
+            }
+
+            if (_newAlbumNameForUpload.Length > 80)
+            {
+                _dialogMessage = "Albumnamen bitte auf 80 Zeichen begrenzen.";
+                return;
+            }
         }
 
         _isSaving = true;
@@ -299,7 +677,7 @@
                         file.Size,
                         ct => Task.FromResult<Stream>(file.OpenReadStream(MaxPhotoBytes, ct)));
 
-                    var result = await GalleryService.UploadPhotoAsync(uploaded, _newPhotoForm.Caption);
+                    var result = await GalleryService.UploadPhotoAsync(uploaded, _newPhotoForm.Caption, targetAlbum);
                     if (result.Success && result.Value is not null)
                     {
                         uploadedPhotos.Add(result.Value);
@@ -326,6 +704,7 @@
             {
                 _photos.InsertRange(0, uploadedPhotos);
                 _photos.Sort(GallerySort);
+                await RefreshAlbumsAsync();
 
                 _pageMessage = failedFiles.Count == 0
                     ? (uploadedPhotos.Count == 1 ? "Bild gespeichert!" : $"{uploadedPhotos.Count} Bilder gespeichert!")
@@ -354,7 +733,7 @@
         var targetState = !photo.IsFavorite;
         if (targetState && FavoriteCount >= FavoriteLimit)
         {
-            _pageMessage = $"Es sind bereits {FavoriteLimit} Favoriten ausgewählt.";
+            _pageMessage = $"Es sind bereits {FavoriteLimit} Favoriten ausgewaehlt.";
             StateHasChanged();
             return;
         }
@@ -375,6 +754,7 @@
                 }
                 _pageMessage = targetState ? "Als Favorit markiert." : "Favorit entfernt.";
                 _photos.Sort(GallerySort);
+                await RefreshAlbumsAsync();
             }
             else
             {
@@ -392,6 +772,16 @@
         }
     }
 
+    private async Task RefreshAlbumsAsync()
+    {
+        var albums = await GalleryService.GetAlbumsAsync();
+        _albums.Clear();
+        _albums.AddRange(albums);
+        RebuildAlbumOptions();
+
+        await ApplyRouteAlbumAsync();
+    }
+
     private int GallerySort(GalleryPhotoDto left, GalleryPhotoDto right)
     {
         var favoriteCompare = right.IsFavorite.CompareTo(left.IsFavorite);
@@ -405,11 +795,243 @@
         return DateTime.Compare(rightDate, leftDate);
     }
 
+    private string GetAlbumName(GalleryPhotoDto photo) => string.IsNullOrWhiteSpace(photo.Album) ? UnassignedAlbum : photo.Album;
+
     private bool IsFavoriteBusy(Guid id) => _favoriteBusy.Contains(id);
+
+    private void ToggleMenu(Guid photoId)
+    {
+        _openMenuPhotoId = _openMenuPhotoId == photoId ? null : photoId;
+    }
+
+    private void HandleAlbumChoiceChanged(ChangeEventArgs args)
+    {
+        var value = args.Value?.ToString();
+        if (string.Equals(value, "__new__", StringComparison.Ordinal))
+        {
+            _useNewAlbumForUpload = true;
+            _newPhotoForm.Album = null;
+        }
+        else
+        {
+            _useNewAlbumForUpload = false;
+            _newAlbumNameForUpload = null;
+            _newPhotoForm.Album = string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+    }
+
+    private void CloseMenus()
+    {
+        _openMenuPhotoId = null;
+    }
+
+    private async Task HandleFavoriteMenuAsync(GalleryPhotoDto photo)
+    {
+        CloseMenus();
+        await ToggleFavoriteAsync(photo);
+    }
+
+    private void OpenMoveDialog(GalleryPhotoDto photo)
+    {
+        _movePhotoId = photo.Id;
+        _moveSelection = photo.Album;
+        _moveDialogMessage = null;
+        _isMoveDialogOpen = true;
+        CloseMenus();
+    }
+
+    private void CloseMoveDialog()
+    {
+        _isMoveDialogOpen = false;
+        _movePhotoId = null;
+        _moveSelection = null;
+        _moveDialogMessage = null;
+    }
+
+    private void OpenEditDialog(GalleryPhotoDto photo)
+    {
+        _editPhoto = photo;
+        _editCaption = photo.Caption;
+        _editMasterPassword = null;
+        _editDialogMessage = null;
+        _isEditDialogOpen = true;
+        CloseMenus();
+    }
+
+    private void CloseEditDialog()
+    {
+        _isEditDialogOpen = false;
+        _editPhoto = null;
+        _editCaption = null;
+        _editMasterPassword = null;
+        _editDialogMessage = null;
+        _isUpdatingPhoto = false;
+        _isDeletingPhoto = false;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_editPhoto is null)
+        {
+            CloseEditDialog();
+            return;
+        }
+
+        _isUpdatingPhoto = true;
+        _editDialogMessage = null;
+        StateHasChanged();
+
+        var result = await GalleryService.UpdatePhotoAsync(_editPhoto.Id, _editCaption, _editPhoto.Album);
+        if (result.Success && result.Value is not null)
+        {
+            var updated = result.Value;
+            var index = _photos.FindIndex(p => p.Id == updated.Id);
+            if (index >= 0)
+            {
+                _photos[index] = updated;
+            }
+            _photos.Sort(GallerySort);
+            await RefreshAlbumsAsync();
+            _pageMessage = "Bild gespeichert.";
+            CloseEditDialog();
+        }
+        else
+        {
+            _editDialogMessage = result.Error ?? "Konnte nicht gespeichert werden.";
+        }
+
+        _isUpdatingPhoto = false;
+    }
+
+    private async Task DeletePhotoAsync()
+    {
+        if (_editPhoto is null)
+        {
+            CloseEditDialog();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_editMasterPassword))
+        {
+            _editDialogMessage = "Bitte Masterpasswort eingeben.";
+            return;
+        }
+
+        _isDeletingPhoto = true;
+        _editDialogMessage = null;
+        StateHasChanged();
+
+        var pwResult = await BucketListService.VerifyMasterPasswordAsync(_editMasterPassword);
+        if (!pwResult.Success)
+        {
+            _editDialogMessage = pwResult.Error ?? "Masterpasswort ist ungueltig.";
+            _isDeletingPhoto = false;
+            return;
+        }
+
+        var deleteResult = await GalleryService.DeletePhotoAsync(_editPhoto.Id);
+        if (deleteResult.Success)
+        {
+            _photos.RemoveAll(p => p.Id == _editPhoto.Id);
+            await RefreshAlbumsAsync();
+            _pageMessage = "Foto gelöscht.";
+            CloseEditDialog();
+        }
+        else
+        {
+            _editDialogMessage = deleteResult.Error ?? "Foto konnte nicht gelöscht werden.";
+        }
+
+        _isDeletingPhoto = false;
+    }
+
+    private async Task ConfirmMoveAsync()
+    {
+        if (_movePhotoId is null)
+        {
+            CloseMoveDialog();
+            return;
+        }
+
+        var photo = _photos.FirstOrDefault(p => p.Id == _movePhotoId.Value);
+        if (photo is null)
+        {
+            _moveDialogMessage = "Foto nicht gefunden.";
+            return;
+        }
+
+        var targetAlbum = string.IsNullOrWhiteSpace(_moveSelection) ? null : _moveSelection;
+        if (string.Equals(targetAlbum, photo.Album, StringComparison.OrdinalIgnoreCase) || (string.IsNullOrWhiteSpace(targetAlbum) && string.IsNullOrWhiteSpace(photo.Album)))
+        {
+            _moveDialogMessage = "Keine Aenderung vorgenommen.";
+            return;
+        }
+
+        var result = await GalleryService.UpdatePhotoAsync(photo.Id, photo.Caption, targetAlbum);
+        if (result.Success && result.Value is not null)
+        {
+            var updated = result.Value;
+            var index = _photos.FindIndex(p => p.Id == updated.Id);
+            if (index >= 0)
+            {
+                _photos[index] = updated;
+            }
+            _photos.Sort(GallerySort);
+            await RefreshAlbumsAsync();
+            _pageMessage = "Foto verschoben.";
+            CloseMoveDialog();
+        }
+        else
+        {
+            _moveDialogMessage = result.Error ?? "Foto konnte nicht verschoben werden.";
+        }
+    }
+
+    private Task ApplyRouteAlbumAsync()
+    {
+        if (!_isInitialized)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (string.IsNullOrWhiteSpace(AlbumName))
+        {
+            _activeAlbum = null;
+            return Task.CompletedTask;
+        }
+
+        var decoded = Uri.UnescapeDataString(AlbumName);
+        var match = _albums.FirstOrDefault(a =>
+            string.Equals(a.Name, decoded, StringComparison.OrdinalIgnoreCase)
+            || (a.IsFavorite && string.Equals(decoded, "favoriten", StringComparison.OrdinalIgnoreCase))
+            || (a.IsUnassigned && string.Equals(decoded, UnassignedAlbum, StringComparison.OrdinalIgnoreCase)));
+
+        _activeAlbum = match;
+        if (match is null)
+        {
+            _pageMessage = "Album nicht gefunden.";
+        }
+        else
+        {
+            _pageMessage = null;
+        }
+
+        return Task.CompletedTask;
+    }
 
     private sealed class AddPhotoFormModel
     {
         [StringLength(160, ErrorMessage = "Bitte maximal 160 Zeichen verwenden.")]
         public string? Caption { get; set; }
+
+        [StringLength(80, ErrorMessage = "Bitte maximal 80 Zeichen fuer den Albumnamen verwenden.")]
+        public string? Album { get; set; }
+    }
+
+    private sealed class NewAlbumForm
+    {
+        [Required]
+        [StringLength(80, ErrorMessage = "Bitte maximal 80 Zeichen fuer den Albumnamen verwenden.")]
+        public string Name { get; set; } = string.Empty;
     }
 }

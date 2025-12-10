@@ -9,11 +9,13 @@ namespace LoveLetter.App.Services;
 public interface IGalleryService
 {
     int FavoriteLimit { get; }
+    Task<IReadOnlyList<GalleryAlbumDto>> GetAlbumsAsync(CancellationToken cancellationToken = default);
+    Task<ServiceResult<GalleryAlbumDto>> CreateAlbumAsync(string name, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<GalleryPhotoDto>> GetPhotosAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<GalleryPhotoDto>> GetFavoritesAsync(int? limit = null, CancellationToken cancellationToken = default);
-    Task<ServiceResult<GalleryPhotoDto>> UploadPhotoAsync(UploadedMediaFile file, string? caption, CancellationToken cancellationToken = default);
+    Task<ServiceResult<GalleryPhotoDto>> UploadPhotoAsync(UploadedMediaFile file, string? caption, string? album, CancellationToken cancellationToken = default);
     Task<ServiceResult<GalleryPhotoDto>> SetFavoriteStateAsync(Guid id, bool isFavorite, CancellationToken cancellationToken = default);
-    Task<ServiceResult<GalleryPhotoDto>> UpdatePhotoAsync(Guid id, string? caption, CancellationToken cancellationToken = default);
+    Task<ServiceResult<GalleryPhotoDto>> UpdatePhotoAsync(Guid id, string? caption, string? album, CancellationToken cancellationToken = default);
     Task<ServiceResult<bool>> DeletePhotoAsync(Guid id, CancellationToken cancellationToken = default);
 }
 
@@ -21,6 +23,8 @@ public sealed class GalleryService : IGalleryService
 {
     private const long MaxPhotoBytes = 15 * 1024 * 1024;
     private const int ThumbnailMaxSize = 512;
+    private const int MaxAlbumLength = 80;
+    private const string FavoritesAlbumName = "Favoriten";
     private static readonly string[] AllowedPhotoExtensions = [".png", ".jpg", ".jpeg", ".webp"];
 
     private readonly IDbContextFactory<LoveLetterDbContext> _dbContextFactory;
@@ -38,12 +42,134 @@ public sealed class GalleryService : IGalleryService
 
     public int FavoriteLimit => _favoriteLimit;
 
+    public async Task<IReadOnlyList<GalleryAlbumDto>> GetAlbumsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var albumEntities = await db.GalleryAlbums.AsNoTracking().ToListAsync(cancellationToken);
+        var photos = await db.GalleryPhotos.AsNoTracking().ToListAsync(cancellationToken);
+
+        var result = new List<GalleryAlbumDto>();
+        var albumLookup = albumEntities.ToDictionary(a => a.Name, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var album in albumEntities.OrderBy(a => a.CreatedAt))
+        {
+            var albumPhotos = photos.Where(p => string.Equals(p.Album, album.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+            var cover = albumPhotos.OrderByDescending(p => p.CreatedAt).FirstOrDefault();
+            result.Add(new GalleryAlbumDto
+            {
+                Id = album.Id,
+                Name = album.Name,
+                PhotoCount = albumPhotos.Count,
+                CoverUrl = cover?.PhotoUrl,
+                CoverThumbnailUrl = cover?.ThumbnailUrl,
+                IsFavorite = false,
+                IsUnassigned = false
+            });
+        }
+
+        var photoAlbumNames = photos
+            .Where(p => !string.IsNullOrWhiteSpace(p.Album))
+            .Select(p => p.Album!)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var name in photoAlbumNames)
+        {
+            if (albumLookup.ContainsKey(name))
+            {
+                continue;
+            }
+
+            var albumPhotos = photos.Where(p => string.Equals(p.Album, name, StringComparison.OrdinalIgnoreCase)).ToList();
+            var cover = albumPhotos.OrderByDescending(p => p.CreatedAt).FirstOrDefault();
+            result.Add(new GalleryAlbumDto
+            {
+                Id = null,
+                Name = name,
+                PhotoCount = albumPhotos.Count,
+                CoverUrl = cover?.PhotoUrl,
+                CoverThumbnailUrl = cover?.ThumbnailUrl,
+                IsFavorite = false,
+                IsUnassigned = false
+            });
+        }
+
+        var unassigned = photos.Where(p => string.IsNullOrWhiteSpace(p.Album)).ToList();
+        if (unassigned.Count > 0)
+        {
+            var cover = unassigned.OrderByDescending(p => p.CreatedAt).FirstOrDefault();
+            result.Add(GalleryAlbumDto.FromUnassigned(unassigned.Count, cover));
+        }
+
+        var favorites = photos.Where(p => p.IsFavorite).ToList();
+        if (favorites.Count > 0)
+        {
+            var cover = favorites.OrderByDescending(p => p.FavoritedAt ?? p.CreatedAt).FirstOrDefault();
+            result.Insert(0, GalleryAlbumDto.FromFavorite(FavoritesAlbumName, favorites.Count, cover));
+        }
+
+        return result
+            .OrderBy(a => a.IsFavorite ? 0 : a.IsUnassigned ? 2 : 1)
+            .ThenBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public async Task<ServiceResult<GalleryAlbumDto>> CreateAlbumAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var normalized = NormalizeAlbum(name);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return ServiceResult<GalleryAlbumDto>.Fail("Albumnamen bitte ausfuellen.");
+        }
+
+        if (normalized.Length > MaxAlbumLength)
+        {
+            return ServiceResult<GalleryAlbumDto>.Fail("Bitte maximal 80 Zeichen fuer den Albumnamen verwenden.");
+        }
+
+        if (IsReservedAlbumName(normalized))
+        {
+            return ServiceResult<GalleryAlbumDto>.Fail("Dieser Albumnamen ist reserviert.");
+        }
+
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var exists = await db.GalleryAlbums.AnyAsync(a => a.Name.ToLower() == normalized.ToLower(), cancellationToken);
+        var photoUsesName = await db.GalleryPhotos.AnyAsync(p => p.Album != null && p.Album.ToLower() == normalized.ToLower(), cancellationToken);
+
+        if (exists || photoUsesName)
+        {
+            return ServiceResult<GalleryAlbumDto>.Fail("Ein Album mit diesem Namen existiert bereits.");
+        }
+
+        var album = new GalleryAlbum
+        {
+            Id = Guid.NewGuid(),
+            Name = normalized,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        db.GalleryAlbums.Add(album);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return ServiceResult<GalleryAlbumDto>.Ok(new GalleryAlbumDto
+        {
+            Id = album.Id,
+            Name = album.Name,
+            PhotoCount = 0,
+            CoverUrl = null,
+            CoverThumbnailUrl = null,
+            IsFavorite = false,
+            IsUnassigned = false
+        });
+    }
+
     public async Task<IReadOnlyList<GalleryPhotoDto>> GetPhotosAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         var photos = await db.GalleryPhotos
             .AsNoTracking()
             .OrderByDescending(p => p.IsFavorite)
+            .ThenBy(p => string.IsNullOrWhiteSpace(p.Album))
+            .ThenBy(p => p.Album)
             .ThenByDescending(p => p.FavoritedAt ?? p.CreatedAt)
             .ThenByDescending(p => p.CreatedAt)
             .ToListAsync(cancellationToken);
@@ -66,27 +192,38 @@ public sealed class GalleryService : IGalleryService
         return favorites.Select(p => p.ToDto()).ToList();
     }
 
-    public async Task<ServiceResult<GalleryPhotoDto>> UploadPhotoAsync(UploadedMediaFile file, string? caption, CancellationToken cancellationToken = default)
+    public async Task<ServiceResult<GalleryPhotoDto>> UploadPhotoAsync(UploadedMediaFile file, string? caption, string? album, CancellationToken cancellationToken = default)
     {
         if (file.Length == 0)
         {
-            return ServiceResult<GalleryPhotoDto>.Fail("Bitte wähle ein Foto aus.");
+            return ServiceResult<GalleryPhotoDto>.Fail("Bitte waehle ein Foto aus.");
         }
 
         if (file.Length > MaxPhotoBytes)
         {
-            return ServiceResult<GalleryPhotoDto>.Fail("Das Foto ist zu groß (maximal 15 MB).");
+            return ServiceResult<GalleryPhotoDto>.Fail("Das Foto ist zu gross (maximal 15 MB).");
         }
 
         if (!string.IsNullOrWhiteSpace(caption) && caption.Length > 160)
         {
-            return ServiceResult<GalleryPhotoDto>.Fail("Bitte verwende maximal 160 Zeichen für die Bildbeschreibung.");
+            return ServiceResult<GalleryPhotoDto>.Fail("Bitte verwende maximal 160 Zeichen fuer die Bildbeschreibung.");
+        }
+
+        var normalizedAlbum = NormalizeAlbum(album);
+        if (normalizedAlbum is { Length: > MaxAlbumLength })
+        {
+            return ServiceResult<GalleryPhotoDto>.Fail("Bitte maximal 80 Zeichen fuer den Albumnamen verwenden.");
+        }
+
+        if (normalizedAlbum is not null && IsReservedAlbumName(normalizedAlbum))
+        {
+            return ServiceResult<GalleryPhotoDto>.Fail("Dieser Albumnamen ist reserviert.");
         }
 
         var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!AllowedPhotoExtensions.Contains(extension))
         {
-            return ServiceResult<GalleryPhotoDto>.Fail("Nur PNG, JPG oder WEBP werden unterstützt.");
+            return ServiceResult<GalleryPhotoDto>.Fail("Nur PNG, JPG oder WEBP werden unterstuetzt.");
         }
 
         var webRoot = GetWebRoot();
@@ -106,6 +243,7 @@ public sealed class GalleryService : IGalleryService
         {
             Id = Guid.NewGuid(),
             Caption = string.IsNullOrWhiteSpace(caption) ? null : caption.Trim(),
+            Album = normalizedAlbum,
             FilePath = relativePath,
             ThumbnailPath = thumbnailRelativePath,
             OriginalFileName = file.FileName,
@@ -113,6 +251,11 @@ public sealed class GalleryService : IGalleryService
         };
 
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        if (normalizedAlbum is not null)
+        {
+            await EnsureAlbumExistsAsync(db, normalizedAlbum, cancellationToken);
+        }
+
         db.GalleryPhotos.Add(photo);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -154,11 +297,22 @@ public sealed class GalleryService : IGalleryService
         return ServiceResult<GalleryPhotoDto>.Ok(photo.ToDto());
     }
 
-    public async Task<ServiceResult<GalleryPhotoDto>> UpdatePhotoAsync(Guid id, string? caption, CancellationToken cancellationToken = default)
+    public async Task<ServiceResult<GalleryPhotoDto>> UpdatePhotoAsync(Guid id, string? caption, string? album, CancellationToken cancellationToken = default)
     {
         if (!string.IsNullOrWhiteSpace(caption) && caption.Length > 160)
         {
             return ServiceResult<GalleryPhotoDto>.Fail("Bitte maximal 160 Zeichen verwenden.");
+        }
+
+        var normalizedAlbum = NormalizeAlbum(album);
+        if (normalizedAlbum is { Length: > MaxAlbumLength })
+        {
+            return ServiceResult<GalleryPhotoDto>.Fail("Bitte maximal 80 Zeichen fuer den Albumnamen verwenden.");
+        }
+
+        if (normalizedAlbum is not null && IsReservedAlbumName(normalizedAlbum))
+        {
+            return ServiceResult<GalleryPhotoDto>.Fail("Dieser Albumnamen ist reserviert.");
         }
 
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -169,6 +323,12 @@ public sealed class GalleryService : IGalleryService
         }
 
         photo.Caption = string.IsNullOrWhiteSpace(caption) ? null : caption.Trim();
+        photo.Album = normalizedAlbum;
+        if (normalizedAlbum is not null)
+        {
+            await EnsureAlbumExistsAsync(db, normalizedAlbum, cancellationToken);
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         return ServiceResult<GalleryPhotoDto>.Ok(photo.ToDto());
     }
@@ -232,6 +392,37 @@ public sealed class GalleryService : IGalleryService
     {
         var relative = Path.GetRelativePath(webRoot, absolutePath);
         return relative.Replace("\\", "/");
+    }
+
+    private static string? NormalizeAlbum(string? album)
+    {
+        if (string.IsNullOrWhiteSpace(album))
+        {
+            return null;
+        }
+
+        return album.Trim();
+    }
+
+    private static bool IsReservedAlbumName(string album)
+    {
+        return string.Equals(album, GalleryPhoto.UnassignedAlbumName, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(album, FavoritesAlbumName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task EnsureAlbumExistsAsync(LoveLetterDbContext db, string album, CancellationToken cancellationToken)
+    {
+        var exists = await db.GalleryAlbums.AnyAsync(a => a.Name.ToLower() == album.ToLower(), cancellationToken);
+        if (!exists)
+        {
+            db.GalleryAlbums.Add(new GalleryAlbum
+            {
+                Id = Guid.NewGuid(),
+                Name = album,
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private void TryDeleteFile(string? relativePath)
