@@ -7,6 +7,8 @@ public sealed record GalleryPhotoDto
 {
     public required Guid Id { get; init; }
     public string? Caption { get; init; }
+    public string? Album { get; init; }
+    public string AlbumDisplayName => string.IsNullOrWhiteSpace(Album) ? GalleryPhoto.UnassignedAlbumName : Album;
     public required string Url { get; init; }
     public string? ThumbnailUrl { get; init; }
     public bool IsFavorite { get; init; }
@@ -25,6 +27,7 @@ public static class GalleryPhotoMappings
     {
         Id = photo.Id,
         Caption = photo.Caption,
+        Album = photo.Album,
         Url = photo.PhotoUrl,
         ThumbnailUrl = photo.ThumbnailUrl,
         IsFavorite = photo.IsFavorite,

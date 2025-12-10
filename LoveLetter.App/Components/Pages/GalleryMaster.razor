@@ -11,7 +11,7 @@
 <main class="gallery-master">
     <section class="gallery-master__header">
         <h1>Galerie verwalten</h1>
-        <p>Fotos bearbeiten oder löschen. Es wird das Masterpasswort aus der Bucket List verwendet.</p>
+        <p>Fotos bearbeiten oder loeschen. Es wird das Masterpasswort aus der Bucket List verwendet.</p>
     </section>
 
     @if (!_isAuthorized)
@@ -23,7 +23,7 @@
                 <InputText @bind-Value="_authForm.Password" type="password" autocomplete="off" placeholder="Masterpasswort eingeben" />
                 <ValidationMessage For="() => _authForm.Password" />
             </label>
-            <button type="submit" disabled="@_isVerifying">@(_isVerifying ? "Prüfe..." : "Freischalten")</button>
+            <button type="submit" disabled="@_isVerifying">@(_isVerifying ? "Pruefe..." : "Freischalten")</button>
             @if (!string.IsNullOrWhiteSpace(_statusMessage))
             {
                 <p class="gallery-master__message">@_statusMessage</p>
@@ -53,6 +53,13 @@
             </div>
         </div>
 
+        <datalist id="gallery-master-albums">
+            @foreach (var album in _albumOptions)
+            {
+                <option value="@album"></option>
+            }
+        </datalist>
+
         @if (!string.IsNullOrWhiteSpace(_statusMessage))
         {
             <p class="gallery-master__message">@_statusMessage</p>
@@ -79,12 +86,16 @@
                                     <input type="checkbox"
                                            checked="@photo.IsSelected"
                                            @onchange="args => HandleSelectionChanged(photo, args)" />
-                                    <span>Für Export auswählen</span>
+                                    <span>Fuer Export auswaehlen</span>
                                 </label>
                             </div>
                             <label>
                                 <span>Beschreibung</span>
                                 <InputText @bind-Value="photo.EditedCaption" />
+                            </label>
+                            <label>
+                                <span>Album</span>
+                                <InputText @bind-Value="photo.EditedAlbum" list="gallery-master-albums" placeholder="Nicht zugeordnet lassen" />
                             </label>
                             <div class="gallery-master__buttons">
                                 <button type="button"
@@ -97,7 +108,7 @@
                                         class="gallery-master__delete"
                                         disabled="@photo.IsDeleting"
                                         @onclick="() => DeletePhotoAsync(photo)">
-                                    @(photo.IsDeleting ? "Lösche..." : "Löschen")
+                                    @(photo.IsDeleting ? "Loesche..." : "Loeschen")
                                 </button>
                             </div>
                         </div>
@@ -112,6 +123,7 @@
     private readonly List<GalleryAdminViewModel> _photos = [];
     private readonly MasterPasswordForm _authForm = new();
     private readonly HashSet<Guid> _selectedPhotoIds = [];
+    private readonly List<string> _albumOptions = [];
     private bool _isAuthorized;
     private bool _isVerifying;
     private bool _isLoading;
@@ -134,7 +146,7 @@
             }
             else
             {
-                _statusMessage = result.Error ?? "Masterpasswort ist ungültig.";
+                _statusMessage = result.Error ?? "Masterpasswort ist ungueltig.";
             }
         }
         finally
@@ -161,6 +173,7 @@
             var items = await GalleryService.GetPhotosAsync();
             _photos.AddRange(items.Select(item => new GalleryAdminViewModel(item)));
             _selectedPhotoIds.Clear();
+            await RefreshAlbumOptionsAsync();
         }
         catch
         {
@@ -185,12 +198,15 @@
 
         try
         {
-            var result = await GalleryService.UpdatePhotoAsync(photo.Id, photo.EditedCaption);
+            var result = await GalleryService.UpdatePhotoAsync(photo.Id, photo.EditedCaption, photo.EditedAlbum);
             if (result.Success && result.Value is not null)
             {
                 photo.Caption = result.Value.Caption;
+                photo.Album = result.Value.Album;
                 photo.EditedCaption = result.Value.Caption;
-                _statusMessage = "Änderungen gespeichert.";
+                photo.EditedAlbum = result.Value.Album;
+                _statusMessage = "Aenderungen gespeichert.";
+                await RefreshAlbumOptionsAsync();
             }
             else
             {
@@ -221,11 +237,12 @@
             {
                 _photos.Remove(photo);
                 _selectedPhotoIds.Remove(photo.Id);
-                _statusMessage = "Foto gelöscht.";
+                _statusMessage = "Foto geloescht.";
+                await RefreshAlbumOptionsAsync();
             }
             else
             {
-                _statusMessage = result.Error ?? "Konnte nicht gelöscht werden.";
+                _statusMessage = result.Error ?? "Konnte nicht geloescht werden.";
             }
         }
         finally
@@ -272,6 +289,19 @@
         await JSRuntime.InvokeVoidAsync("window.open", exportUrl, "_blank");
     }
 
+    private async Task RefreshAlbumOptionsAsync()
+    {
+        var albums = await GalleryService.GetAlbumsAsync();
+        var names = albums
+            .Where(a => !a.IsFavorite && !a.IsUnassigned)
+            .Select(a => a.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(a => a, StringComparer.OrdinalIgnoreCase);
+
+        _albumOptions.Clear();
+        _albumOptions.AddRange(names);
+    }
+
     private sealed class MasterPasswordForm
     {
         [Required]
@@ -286,7 +316,9 @@
             Url = dto.Url;
             ThumbnailUrl = dto.ThumbnailUrl;
             Caption = dto.Caption;
+            Album = dto.Album;
             EditedCaption = dto.Caption;
+            EditedAlbum = dto.Album;
             IsFavorite = dto.IsFavorite;
         }
 
@@ -295,7 +327,9 @@
         public string? ThumbnailUrl { get; }
         public bool IsFavorite { get; }
         public string? Caption { get; set; }
+        public string? Album { get; set; }
         public string? EditedCaption { get; set; }
+        public string? EditedAlbum { get; set; }
         public bool IsSaving { get; set; }
         public bool IsDeleting { get; set; }
         public bool IsSelected { get; set; }
