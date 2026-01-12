@@ -1,0 +1,356 @@
+@page "/reisen"
+@using LoveLetter.App.Models
+@using LoveLetter.App.Services
+@using LoveLetter.App.Configuration
+@using Microsoft.Extensions.Configuration
+@inject ITravelDestinationService TravelService
+@inject ICountryCatalogService CountryCatalog
+@inject IJSRuntime JS
+@inject IConfiguration Configuration
+
+<PageTitle>Reisekarte</PageTitle>
+
+<div class="background-glow"></div>
+
+<main class="travel-page">
+    <section class="travel-map-card">
+        <div class="travel-map__header">
+            <div>
+                <p class="section-eyebrow">Weltkarte</p>
+                <h3>Markierte Länder</h3>
+            </div>
+            <div class="travel-legend">
+                <span class="travel-legend__dot travel-legend__dot--visited"></span> Besuchte Länder
+                <span class="travel-legend__dot travel-legend__dot--planned"></span> Wunschliste
+            </div>
+        </div>
+        <div id="travel-map-canvas" class="travel-map__canvas" aria-live="polite">
+            @if (_isLoading)
+            {
+                <p class="travel-map__loading">Lade Karte...</p>
+            }
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="travel-error">@_error</p>
+        }
+    </section>
+
+    <section class="travel-list">
+        <div class="travel-list__group">
+            <div class="travel-list__header">
+                <h4>Wunschliste</h4>
+                <button class="travel-mini" type="button" @onclick="OpenDialog">+</button>
+            </div>
+            @if (!Planned.Any())
+            {
+                <p class="travel-empty">Noch keine Ziele eingetragen. Füge deine ersten Reiseträume hinzu.</p>
+            }
+            else
+            {
+                <ul class="travel-items">
+                    @foreach (var country in Planned)
+                    {
+                        <li class="travel-item">
+                            <div class="travel-item__info">
+                                @{
+                                    var flag = GetFlagFor(country.Code);
+                                }
+                                @if (!string.IsNullOrWhiteSpace(flag))
+                                {
+                                    <img src="@flag" alt="" class="travel-item__flag" loading="lazy" />
+                                }
+                                <div>
+                                    <p class="travel-item__title">@country.Name</p>
+                                    <small class="travel-item__meta">@country.Code</small>
+                                </div>
+                            </div>
+                            <label class="travel-toggle">
+                                <input type="checkbox" @onchange="() => ToggleVisitedAsync(country)" />
+                                <span>Abgehakt</span>
+                            </label>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+
+        <div class="travel-list__group">
+            <div class="travel-list__header">
+                <h4>Bereits erlebt</h4>
+            </div>
+            @if (!Visited.Any())
+            {
+                <p class="travel-empty">Noch nichts markiert – Zeit für neue Stempel im Pass.</p>
+            }
+            else
+            {
+                <ul class="travel-items travel-items--visited">
+                    @foreach (var country in Visited)
+                    {
+                        <li class="travel-item">
+                            <div class="travel-item__info">
+                                @{
+                                    var flag = GetFlagFor(country.Code);
+                                }
+                                @if (!string.IsNullOrWhiteSpace(flag))
+                                {
+                                    <img src="@flag" alt="" class="travel-item__flag" loading="lazy" />
+                                }
+                                <div>
+                                    <p class="travel-item__title">@country.Name</p>
+                                    <small class="travel-item__meta">@country.Code</small>
+                                </div>
+                            </div>
+                            @if (_showUnmarkToggle)
+                            {
+                                <label class="travel-toggle">
+                                    <input type="checkbox" checked @onchange="() => ToggleVisitedAsync(country)" />
+                                    <span>Markierung entfernen</span>
+                                </label>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    </section>
+</main>
+
+@if (_dialogOpen)
+{
+    <div class="travel-dialog" role="dialog" aria-modal="true" @onclick="CloseDialog">
+        <div class="travel-dialog__content" @onclick:stopPropagation="true">
+            <header class="travel-dialog__header">
+                <div>
+                    <p class="travel-dialog__eyebrow">Neues Ziel</p>
+                    <h4>Wohin wollen wir?</h4>
+                </div>
+                <button class="travel-dialog__close" type="button" aria-label="Dialog schließen" @onclick="CloseDialog">✕</button>
+            </header>
+
+            <label class="travel-dialog__search">
+                <span>Land suchen</span>
+                <input class="travel-dialog__input"
+                       placeholder="z. B. Japan, Canada, Portugal"
+                       @bind="_searchTerm"
+                       @bind:event="oninput" />
+            </label>
+
+            <div class="travel-dialog__options">
+                @if (!FilteredOptions.Any())
+                {
+                    <p class="travel-empty">Nichts gefunden oder bereits hinzugefügt.</p>
+                }
+                else
+                {
+                    @foreach (var option in FilteredOptions)
+                    {
+                        <button class="travel-option" type="button" @onclick="() => AddCountryAsync(option)">
+                            <div>
+                                <p class="travel-option__name">@option.Name</p>
+                                <small class="travel-option__code">@option.Code</small>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(option.FlagPng))
+                            {
+                                <img src="@option.FlagPng" alt="" class="travel-option__flag" loading="lazy" />
+                            }
+                            <span class="travel-option__add">Hinzufügen</span>
+                        </button>
+                    }
+                }
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_dialogMessage))
+            {
+                <p class="travel-error">@_dialogMessage</p>
+            }
+            @if (!_countriesLoaded)
+            {
+                <p class="travel-empty">Länderliste wird geladen...</p>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private readonly List<TravelCountryDto> _destinations = [];
+    private IReadOnlyList<CountryOption> _countries = Array.Empty<CountryOption>();
+    private Dictionary<string, string?> _flagByCode = new(StringComparer.OrdinalIgnoreCase);
+    private bool _showUnmarkToggle = true;
+    private bool _countriesLoaded;
+    private bool _isLoading;
+    private string? _error;
+    private bool _dialogOpen;
+    private string _searchTerm = string.Empty;
+    private string? _dialogMessage;
+    private bool _mapNeedsUpdate;
+
+    private IEnumerable<TravelCountryDto> Planned => _destinations.Where(d => !d.IsVisited).OrderBy(d => d.Name);
+    private IEnumerable<TravelCountryDto> Visited => _destinations.Where(d => d.IsVisited).OrderBy(d => d.Name);
+    private int PlannedCount => Planned.Count();
+    private int VisitedCount => Visited.Count();
+
+    private IEnumerable<CountryOption> FilteredOptions
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_searchTerm))
+            {
+                return _countries.Take(10);
+            }
+
+            return _countries
+                .Where(c => c.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+                            || c.Code.Contains(_searchTerm.Trim(), StringComparison.OrdinalIgnoreCase))
+                .Where(c => !_destinations.Any(d => d.Code.Equals(c.Code, StringComparison.OrdinalIgnoreCase)))
+                .Take(10);
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var allowUnmarkEnv = Configuration[LoveConfigLoader.Keys.TravelAllowUnmark] ?? Configuration["TRAVEL_ALLOW_UNMARK"];
+        _showUnmarkToggle = ParseFlag(allowUnmarkEnv, defaultValue: true);
+        await LoadAsync();
+        await LoadCountriesAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_mapNeedsUpdate && !_isLoading)
+        {
+            _mapNeedsUpdate = false;
+            await UpdateMapAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        try
+        {
+            var items = await TravelService.GetAsync();
+            _destinations.Clear();
+            _destinations.AddRange(items);
+            _mapNeedsUpdate = true;
+        }
+        catch
+        {
+            _error = "Konnte die Reisedaten nicht laden.";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OpenDialog()
+    {
+        _dialogOpen = true;
+        _dialogMessage = null;
+        _searchTerm = string.Empty;
+    }
+
+    private void CloseDialog()
+    {
+        _dialogOpen = false;
+        _dialogMessage = null;
+    }
+
+    private async Task AddCountryAsync(CountryOption option)
+    {
+        _dialogMessage = null;
+        var result = await TravelService.AddPlannedAsync(option.Code);
+        if (!result.Success || result.Value is null)
+        {
+            _dialogMessage = result.Error ?? "Konnte das Land nicht speichern.";
+            StateHasChanged();
+            return;
+        }
+
+        Upsert(result.Value);
+        _mapNeedsUpdate = true;
+        _searchTerm = string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task ToggleVisitedAsync(TravelCountryDto country)
+    {
+        var result = await TravelService.SetVisitedAsync(country.Id, !country.IsVisited);
+        if (result.Success && result.Value is not null)
+        {
+            Upsert(result.Value);
+            _mapNeedsUpdate = true;
+            StateHasChanged();
+        }
+    }
+
+    private void Upsert(TravelCountryDto dto)
+    {
+        var existingIndex = _destinations.FindIndex(d => d.Id == dto.Id || d.Code.Equals(dto.Code, StringComparison.OrdinalIgnoreCase));
+        if (existingIndex >= 0)
+        {
+            _destinations[existingIndex] = dto;
+        }
+        else
+        {
+            _destinations.Add(dto);
+        }
+    }
+
+    private async Task UpdateMapAsync()
+    {
+        try
+        {
+            var visited = Visited.Select(v => v.Code).ToArray();
+            var planned = Planned.Select(p => p.Code).ToArray();
+            await JS.InvokeVoidAsync("travelMap.update", "travel-map-canvas", "data/world-countries.geojson", visited, planned);
+        }
+        catch
+        {
+            _error = "Konnte die Karte nicht initialisieren.";
+        }
+    }
+
+    private async Task LoadCountriesAsync()
+    {
+        try
+        {
+            _countries = await CountryCatalog.GetAllAsync();
+            _flagByCode = _countries.ToDictionary(c => c.Code, c => c.FlagPng, StringComparer.OrdinalIgnoreCase);
+            _countriesLoaded = true;
+            StateHasChanged();
+        }
+        catch
+        {
+            _dialogMessage = "Konnte Länderliste nicht laden.";
+        }
+    }
+
+    private string? GetFlagFor(string code)
+    {
+        if (_flagByCode.TryGetValue(code, out var flag) && !string.IsNullOrWhiteSpace(flag))
+        {
+            return flag;
+        }
+
+        return null;
+    }
+
+    private static bool ParseFlag(string? value, bool defaultValue)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultValue;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "false" or "0" or "no" or "off" => false,
+            _ => true
+        };
+    }
+}

@@ -9,6 +9,15 @@ public class LoveLetterDbContext(DbContextOptions<LoveLetterDbContext> options) 
     public DbSet<BucketListMedia> BucketListMedia => Set<BucketListMedia>();
     public DbSet<GalleryPhoto> GalleryPhotos => Set<GalleryPhoto>();
     public DbSet<GalleryAlbum> GalleryAlbums => Set<GalleryAlbum>();
+    public DbSet<TravelCountry> TravelCountries => Set<TravelCountry>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+        modelBuilder.Entity<TravelCountry>()
+            .HasIndex(c => c.CountryCode)
+            .IsUnique();
+    }
 }
 
 public sealed class LoveLetterDbContextFactory : IDesignTimeDbContextFactory<LoveLetterDbContext>

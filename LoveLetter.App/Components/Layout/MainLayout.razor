@@ -1,4 +1,5 @@
 ﻿@inherits LayoutComponentBase
+@inject LoveConfig Content
 
 <div class="app-layout">
     <header class="app-header">
@@ -23,6 +24,10 @@
         <NavLink href="/" Match="NavLinkMatch.All" class="app-menu__link" @onclick="CloseMenu">Startseite</NavLink>
         <NavLink href="/bucket-list" class="app-menu__link" @onclick="CloseMenu">Bucket List</NavLink>
         <NavLink href="/gallery" class="app-menu__link" @onclick="CloseMenu">Galerie</NavLink>
+        @if (Content.TravelVisible)
+        {
+            <NavLink href="/reisen" class="app-menu__link" @onclick="CloseMenu">Reisekarte</NavLink>
+        }
     </nav>
 
     <main class="app-shell">

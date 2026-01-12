@@ -1,6 +1,7 @@
 using LoveLetter.App.Components;
 using LoveLetter.App.Configuration;
 using LoveLetter.App.Data;
+using LoveLetter.App.Endpoints;
 using LoveLetter.App.Services;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +22,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<ISpotifyMetadataService, SpotifyMetadataService>();
 builder.Services.AddSingleton<ISpotifyPlaylistService, SpotifyPlaylistService>();
 builder.Services.AddSingleton<IHeroImageService, HeroImageService>();
+builder.Services.AddHttpClient();
 
 builder.Services.Configure<BucketListSecurityOptions>(options =>
 {
@@ -43,6 +45,8 @@ builder.Services.AddSingleton<IImageThumbnailService, ImageThumbnailService>();
 builder.Services.AddSingleton<IBucketThumbnailQueue, BucketThumbnailQueue>();
 builder.Services.AddHostedService<BucketThumbnailBackgroundService>();
 builder.Services.AddSingleton<ThumbnailBackfillService>();
+builder.Services.AddSingleton<ITravelDestinationService, TravelDestinationService>();
+builder.Services.AddSingleton<ICountryCatalogService, CountryCatalogService>();
 
 var app = builder.Build();
 
@@ -62,6 +66,7 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+app.MapTravelEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {
