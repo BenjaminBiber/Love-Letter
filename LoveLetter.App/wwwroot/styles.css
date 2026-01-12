@@ -1916,6 +1916,13 @@ section {
     transform: translateY(-1px);
 }
 
+.gallery-page__add-btn--ghost {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+    box-shadow: none;
+}
+
 .gallery-page__hint {
     font-size: 0.85rem;
     color: var(--text-muted);
