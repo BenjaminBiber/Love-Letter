@@ -10,12 +10,17 @@ public class LoveLetterDbContext(DbContextOptions<LoveLetterDbContext> options) 
     public DbSet<GalleryPhoto> GalleryPhotos => Set<GalleryPhoto>();
     public DbSet<GalleryAlbum> GalleryAlbums => Set<GalleryAlbum>();
     public DbSet<TravelCountry> TravelCountries => Set<TravelCountry>();
+    public DbSet<WatchlistMovie> WatchlistMovies => Set<WatchlistMovie>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.Entity<TravelCountry>()
             .HasIndex(c => c.CountryCode)
+            .IsUnique();
+
+        modelBuilder.Entity<WatchlistMovie>()
+            .HasIndex(m => m.ImdbId)
             .IsUnique();
     }
 }

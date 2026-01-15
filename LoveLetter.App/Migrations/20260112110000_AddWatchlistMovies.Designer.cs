@@ -3,6 +3,7 @@ using System;
 using LoveLetter.App.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace LoveLetter.App.Migrations
 {
     [DbContext(typeof(LoveLetterDbContext))]
-    partial class LoveLetterDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260112110000_AddWatchlistMovies")]
+    partial class AddWatchlistMovies
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.0-preview.6.24327.4");
@@ -157,6 +160,9 @@ namespace LoveLetter.App.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("CountryCode")
                         .IsRequired()
                         .HasMaxLength(3)
@@ -165,9 +171,6 @@ namespace LoveLetter.App.Migrations
                     b.Property<string>("CountryName")
                         .IsRequired()
                         .HasMaxLength(120)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsVisited")
@@ -198,10 +201,6 @@ namespace LoveLetter.App.Migrations
                         .HasMaxLength(24)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Plot")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("PosterUrl")
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
@@ -211,18 +210,14 @@ namespace LoveLetter.App.Migrations
                         .HasMaxLength(240)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Type")
-                        .HasMaxLength(40)
+                    b.Property<string>("Year")
+                        .HasMaxLength(12)
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("Watched")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("WatchedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Year")
-                        .HasMaxLength(12)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");

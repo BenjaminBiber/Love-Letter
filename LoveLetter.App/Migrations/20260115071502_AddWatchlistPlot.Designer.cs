@@ -3,6 +3,7 @@ using System;
 using LoveLetter.App.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace LoveLetter.App.Migrations
 {
     [DbContext(typeof(LoveLetterDbContext))]
-    partial class LoveLetterDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260115071502_AddWatchlistPlot")]
+    partial class AddWatchlistPlot
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.0-preview.6.24327.4");
@@ -209,10 +212,6 @@ namespace LoveLetter.App.Migrations
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(240)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Type")
-                        .HasMaxLength(40)
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("Watched")

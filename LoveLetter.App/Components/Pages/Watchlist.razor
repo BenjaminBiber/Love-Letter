@@ -1,0 +1,539 @@
+@page "/watchlist"
+@using System.Diagnostics
+@using System.Net.Http.Json
+@using LoveLetter.App.Models
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<PageTitle>Watchlist</PageTitle>
+
+<div class="background-glow"></div>
+
+<main class="watchlist-page">
+    <header class="watchlist-hero">
+        <div>
+            <p class="section-eyebrow">Filmideen</p>
+            <h1>Watchlist</h1>
+            <p class="watchlist-lead">
+                Sammle Filme & Serien, die wir zusammen sehen wollen. Per Shuffle wählen wir spontan den nächsten Abend aus.
+            </p>
+        </div>
+        <div class="watchlist-hero__actions">
+            <button class="watchlist-icon-btn @(IsFilterActive(Filter.Watched) ? "is-on" : string.Empty)"
+                    type="button"
+                    title="@GetFilterLabel()"
+                    aria-label="@GetFilterLabel()"
+                    @onclick="CycleFilter">
+                <span aria-hidden="true">
+                    @GetFilterIcon()
+                </span>
+            </button>
+            <button class="watchlist-btn watchlist-btn--ghost" type="button" @onclick="ShuffleMovie">
+                Shuffle
+            </button>
+            <button class="watchlist-add" type="button" aria-label="Film hinzufügen" @onclick="OpenDialog">
+                +
+            </button>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(_alert))
+    {
+        <div class="watchlist-alert watchlist-alert--error">@_alert</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(_info))
+    {
+        <div class="watchlist-alert">@_info</div>
+    }
+
+    @if (_highlighted is not null)
+    {
+        <section class="watchlist-highlight" aria-live="polite">
+            <p class="section-eyebrow">Zufällig ausgewählt</p>
+            <div class="watch-card is-highlighted">
+                <button class="watch-card__close"
+                        type="button"
+                        aria-label="Vorschlag schließen"
+                        @onclick="() => _highlighted = null">
+                    ✕
+                </button>
+                <div class="watch-card__poster">
+                    @if (!string.IsNullOrWhiteSpace(_highlighted.PosterUrl))
+                    {
+                        <img src="@_highlighted.PosterUrl" alt="" loading="lazy" />
+                    }
+                    else
+                    {
+                        <div class="watch-card__placeholder">🎬</div>
+                    }
+                    @if (_highlighted.Watched)
+                    {
+                        <span class="watch-card__badge">Gesehen</span>
+                    }
+                </div>
+                <div class="watch-card__body">
+                    <div class="watch-card__title-row">
+                        <h3>@_highlighted.Title</h3>
+                        @if (!string.IsNullOrWhiteSpace(_highlighted.Year))
+                        {
+                            <span class="watch-card__year">@_highlighted.Year</span>
+                        }
+                        <span class="watch-card__type">@FormatType(_highlighted.Type)</span>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(_highlighted.Plot))
+                    {
+                        <p class="watch-card__plot">@_highlighted.Plot</p>
+                    }
+                <p class="watch-card__meta">Perfekt für heute Abend.</p>
+            </div>
+        </div>
+    </section>
+}
+
+    <section class="watchlist-grid" aria-live="polite">
+        @if (_isLoading)
+        {
+            <p class="watchlist-empty">Lade Watchlist...</p>
+        }
+        else if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <p class="watchlist-empty">@_errorMessage</p>
+        }
+        else
+        {
+            var moviesToRender = GetFilteredMovies().ToList();
+            var stackedClass = moviesToRender.Count > 2 ? "watchlist-grid__inner--stacked" : string.Empty;
+            <div class="watchlist-grid__inner @stackedClass">
+                @foreach (var movie in moviesToRender)
+                {
+                    var highlightClass = _highlighted?.Id == movie.Id ? "is-highlighted" : string.Empty;
+                    <article class="watch-card @highlightClass @(movie.Watched ? "is-seen" : string.Empty)">
+                        <div class="watch-card__poster">
+                            @if (!string.IsNullOrWhiteSpace(movie.PosterUrl))
+                            {
+                                <img src="@movie.PosterUrl" alt="" loading="lazy" />
+                            }
+                            else
+                            {
+                                <div class="watch-card__placeholder">🎥</div>
+                            }
+                            @if (movie.Watched)
+                            {
+                                <span class="watch-card__badge">Gesehen</span>
+                            }
+                        </div>
+                        <div class="watch-card__body">
+                            <div class="watch-card__title-row">
+                                <h3>@movie.Title</h3>
+                                @if (!string.IsNullOrWhiteSpace(movie.Year))
+                                {
+                                    <span class="watch-card__year">@movie.Year</span>
+                                }
+                                <span class="watch-card__type">@FormatType(movie.Type)</span>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(movie.Plot))
+                            {
+                                <p class="watch-card__plot">@movie.Plot</p>
+                            }
+                            <div class="watch-card__actions">
+                                <button class="watchlist-btn watchlist-btn--tiny"
+                                        type="button"
+                                        @onclick="() => ToggleWatchedAsync(movie)">
+                                    @(movie.Watched ? "Als ungesehen markieren" : "Als gesehen markieren")
+                                </button>
+                                @if (_allowDelete)
+                                {
+                                    <button class="watchlist-btn watchlist-btn--tiny watchlist-btn--danger"
+                                            type="button"
+                                            @onclick="() => DeleteMovieAsync(movie)">
+                                        Löschen
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+</main>
+
+@if (_dialogOpen)
+{
+    <div class="watchlist-dialog" role="dialog" aria-modal="true" @onclick="CloseDialog">
+        <div class="watchlist-dialog__content" @onclick:stopPropagation="true">
+            <header class="watchlist-dialog__header">
+                <div>
+                    <p class="section-eyebrow">Film suchen</p>
+                    <h2>OMDB durchsuchen</h2>
+                </div>
+                <button class="watchlist-dialog__close" type="button" aria-label="Dialog schließen" @onclick="CloseDialog">✕</button>
+            </header>
+
+            <EditForm Model="_searchForm" OnValidSubmit="PerformSearchAsync">
+                <div class="watchlist-dialog__search">
+                    <InputText class="watchlist-dialog__input"
+                               placeholder="Titel eingeben"
+                               @bind-Value="_searchForm.Query" />
+                    <button class="watchlist-btn" type="submit" disabled="@_searching">Suchen</button>
+                </div>
+            </EditForm>
+
+            @if (_searching)
+            {
+                <p class="watchlist-empty">Suche läuft...</p>
+            }
+            else if (!string.IsNullOrWhiteSpace(_searchError))
+            {
+                <p class="watchlist-alert watchlist-alert--error">@_searchError</p>
+            }
+            else if (_searchResults.Count == 0)
+            {
+                <p class="watchlist-empty">Noch keine Ergebnisse.</p>
+            }
+            else
+            {
+                <ul class="watchlist-results">
+                    @foreach (var result in _searchResults)
+                    {
+                        var exists = IsAlreadyAdded(result.ImdbId);
+                        <li class="watchlist-result">
+                            <div class="watchlist-result__info">
+                                @if (!string.IsNullOrWhiteSpace(result.PosterUrl))
+                                {
+                                    <img src="@result.PosterUrl" alt="" loading="lazy" />
+                                }
+                                else
+                                {
+                                    <div class="watch-card__placeholder watch-card__placeholder--small">🎬</div>
+                                }
+                                    <div>
+                                        <p class="watchlist-result__title">@result.Title</p>
+                                        <small class="watchlist-result__meta">@result.Year</small>
+                                        <small class="watchlist-result__meta">@FormatType(result.Type)</small>
+                                    </div>
+                                </div>
+                            <button class="watchlist-btn watchlist-btn--tiny"
+                                    type="button"
+                                    disabled="@(_adding || exists)"
+                                    @onclick="() => AddMovieAsync(result.ImdbId)">
+                                @(exists ? "Schon hinzugefügt" : "Zur Watchlist")
+                            </button>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private readonly List<WatchlistMovieDto> _movies = [];
+    private List<WatchlistSearchResult> _searchResults = new();
+    private WatchlistMovieDto? _highlighted;
+    private bool _isLoading = true;
+    private bool _dialogOpen;
+    private bool _allowDelete;
+    private Filter _filter = Filter.All;
+    private string? _errorMessage;
+    private string? _alert;
+    private string? _info;
+    private bool _searching;
+    private bool _adding;
+    private string? _searchError;
+    private readonly SearchForm _searchForm = new();
+    private readonly Random _random = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _allowDelete = Debugger.IsAttached;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        _alert = null;
+        try
+        {
+            var url = Navigation.ToAbsoluteUri("/api/watchlist");
+            var items = await Http.GetFromJsonAsync<List<WatchlistMovieDto>>(url);
+            _movies.Clear();
+            if (items is not null)
+            {
+                _movies.AddRange(items);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+            _errorMessage = "Konnte Watchlist nicht laden.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void OpenDialog()
+    {
+        _dialogOpen = true;
+        _searchError = null;
+        _searchResults = new List<WatchlistSearchResult>();
+        _searchForm.Query = string.Empty;
+    }
+
+    private void CloseDialog()
+    {
+        _dialogOpen = false;
+    }
+
+    private async Task PerformSearchAsync()
+    {
+        _searching = true;
+        _searchError = null;
+        _searchResults = new List<WatchlistSearchResult>();
+
+        try
+        {
+            var encoded = Uri.EscapeDataString(_searchForm.Query ?? string.Empty);
+            var url = Navigation.ToAbsoluteUri($"/api/watchlist/search?query={encoded}");
+            var response = await Http.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                var results = await response.Content.ReadFromJsonAsync<List<WatchlistSearchResult>>();
+                _searchResults = (results ?? new List<WatchlistSearchResult>()).ToList();
+                if (_searchResults.Count == 0)
+                {
+                    _searchError = "Keine Filme gefunden.";
+                }
+            }
+            else
+            {
+                _searchError = await response.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(_searchError))
+                {
+                    _searchError = "Suche fehlgeschlagen.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+            _searchError = "OMDB Anfrage fehlgeschlagen.";
+        }
+        finally
+        {
+            _searching = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AddMovieAsync(string imdbId)
+    {
+        _adding = true;
+        _alert = null;
+        _info = null;
+
+        try
+        {
+            var url = Navigation.ToAbsoluteUri("/api/watchlist");
+            var response = await Http.PostAsJsonAsync(url, new AddWatchlistMovieRequest { ImdbId = imdbId });
+            if (response.IsSuccessStatusCode)
+            {
+                var movie = await response.Content.ReadFromJsonAsync<WatchlistMovieDto>();
+                if (movie is not null)
+                {
+                    _movies.Insert(0, movie);
+                    _info = $"{movie.Title} wurde hinzugefügt.";
+                    CloseDialog();
+                }
+            }
+            else
+            {
+                _alert = await response.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(_alert))
+                {
+                    _alert = "Film konnte nicht hinzugefügt werden.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+            _alert = "Film konnte nicht hinzugefügt werden.";
+        }
+        finally
+        {
+            _adding = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleWatchedAsync(WatchlistMovieDto movie)
+    {
+        var target = !movie.Watched;
+        try
+        {
+            var url = Navigation.ToAbsoluteUri($"/api/watchlist/{movie.Id}/watched");
+            var response = await Http.PostAsJsonAsync(url, new SetWatchedRequest { Watched = target });
+            if (response.IsSuccessStatusCode)
+            {
+                var updated = await response.Content.ReadFromJsonAsync<WatchlistMovieDto>();
+                if (updated is not null)
+                {
+                    var index = _movies.FindIndex(m => m.Id == movie.Id);
+                    if (index >= 0)
+                    {
+                        _movies[index] = updated;
+                    }
+                }
+            }
+            else
+            {
+                _alert = await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+            _alert = "Status konnte nicht geändert werden.";
+        }
+    }
+
+    private async Task DeleteMovieAsync(WatchlistMovieDto movie)
+    {
+        if (!_allowDelete)
+        {
+            return;
+        }
+
+        try
+        {
+            var url = Navigation.ToAbsoluteUri($"/api/watchlist/{movie.Id}");
+            var response = await Http.DeleteAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                _movies.RemoveAll(m => m.Id == movie.Id);
+                if (_highlighted?.Id == movie.Id)
+                {
+                    _highlighted = null;
+                }
+                _info = $"{movie.Title} wurde gelöscht.";
+            }
+            else
+            {
+                _alert = await response.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(_alert))
+                {
+                    _alert = "Film konnte nicht gelöscht werden.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+            _alert = "Film konnte nicht gelöscht werden.";
+        }
+    }
+
+    private void ShuffleMovie()
+    {
+        _info = null;
+        _alert = null;
+        if (_movies.Count == 0)
+        {
+            _alert = "Keine Filme in der Liste.";
+            return;
+        }
+
+        var pool = _movies.Where(m => !m.Watched).ToList();
+        if (pool.Count == 0)
+        {
+            pool = _movies.ToList();
+        }
+
+        var selected = pool[_random.Next(pool.Count)];
+        _highlighted = selected;
+    }
+
+    private bool IsAlreadyAdded(string imdbId)
+    {
+        return _movies.Any(m => m.ImdbId.Equals(imdbId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string FormatType(string? type)
+    {
+        if (string.IsNullOrWhiteSpace(type))
+        {
+            return "Film";
+        }
+
+        if (string.Equals(type, "series", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Serie";
+        }
+
+        if (string.Equals(type, "movie", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Film";
+        }
+
+        return type;
+    }
+
+    private IEnumerable<WatchlistMovieDto> GetFilteredMovies()
+    {
+        return _filter switch
+        {
+            Filter.Unwatched => _movies.Where(m => !m.Watched),
+            Filter.Watched => _movies.Where(m => m.Watched),
+            _ => _movies
+        };
+    }
+
+    private bool IsFilterActive(Filter filter) => _filter == filter;
+
+    private void SetFilter(Filter filter)
+    {
+        _filter = filter;
+    }
+
+    private void CycleFilter()
+    {
+        _filter = _filter switch
+        {
+            Filter.All => Filter.Unwatched,
+            Filter.Unwatched => Filter.Watched,
+            _ => Filter.All
+        };
+    }
+
+    private string GetFilterLabel() => _filter switch
+    {
+        Filter.Unwatched => "Nur ungesehene zeigen",
+        Filter.Watched => "Nur gesehene zeigen",
+        _ => "Alle anzeigen"
+    };
+
+    private string GetFilterIcon() => _filter switch
+    {
+        Filter.Unwatched => "👀",
+        Filter.Watched => "😴",
+        _ => "👓"
+    };
+
+    private sealed class SearchForm
+    {
+        public string Query { get; set; } = string.Empty;
+    }
+
+    private enum Filter
+    {
+        All,
+        Unwatched,
+        Watched
+    }
+}

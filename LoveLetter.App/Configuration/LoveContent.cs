@@ -92,6 +92,7 @@ public static class LoveContent
         ],
         MemoriesVisible = true,
         TravelVisible = true,
+        WatchlistVisible = true,
         Gallery =
         [],
         Highlights =

@@ -9,6 +9,7 @@ public sealed record LoveConfig
     public required IReadOnlyList<MemoryEntry> Memories { get; init; }
     public bool MemoriesVisible { get; init; }
     public bool TravelVisible { get; init; }
+    public bool WatchlistVisible { get; init; }
     public required IReadOnlyList<GalleryItem> Gallery { get; init; }
     public required IReadOnlyList<HighlightItem> Highlights { get; init; }
     public required BucketListSection BucketList { get; init; }

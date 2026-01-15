@@ -37,6 +37,8 @@ public static class LoveConfigLoader
         public const string GalleryFavoriteLimit = "LOVE_GALLERY_FAVORITE_LIMIT";
         public const string TravelVisible = "LOVE_TRAVEL_VISIBLE";
         public const string TravelAllowUnmark = "LOVE_TRAVEL_ALLOW_UNMARK";
+        public const string WatchlistVisible = "LOVE_WATCHLIST_VISIBLE";
+        public const string OmdbApiKey = "LOVE_OMDB_API_KEY";
 
         public const string BucketEyebrow = "LOVE_BUCKET_EYEBROW";
         public const string BucketHeading = "LOVE_BUCKET_HEADING";
@@ -139,6 +141,7 @@ public static class LoveConfigLoader
             Memories = memories,
             MemoriesVisible = GetBool(configuration, Keys.MemoriesVisible, defaults.MemoriesVisible),
             TravelVisible = GetBool(configuration, Keys.TravelVisible, defaults.TravelVisible),
+            WatchlistVisible = GetBool(configuration, Keys.WatchlistVisible, defaults.WatchlistVisible),
             Gallery = defaults.Gallery,
             Highlights = highlights,
             BucketList = bucketList,

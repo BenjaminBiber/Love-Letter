@@ -5,6 +5,7 @@ using LoveLetter.App.Endpoints;
 using LoveLetter.App.Services;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
 using BucketConfigMedia = LoveLetter.App.Configuration.BucketListMedia;
 using BucketListMediaEntity = LoveLetter.App.Data.BucketListMedia;
 
@@ -23,6 +24,7 @@ builder.Services.AddHttpClient<ISpotifyMetadataService, SpotifyMetadataService>(
 builder.Services.AddSingleton<ISpotifyPlaylistService, SpotifyPlaylistService>();
 builder.Services.AddSingleton<IHeroImageService, HeroImageService>();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient<IWatchlistService, WatchlistService>();
 
 builder.Services.Configure<BucketListSecurityOptions>(options =>
 {
@@ -34,6 +36,21 @@ builder.Services.Configure<BucketListSecurityOptions>(options =>
 
 var dataDirectory = Path.Combine(builder.Environment.ContentRootPath, "App_Data");
 Directory.CreateDirectory(dataDirectory);
+
+#if DEBUG
+if (Debugger.IsAttached)
+{
+    // Lokale Defaults für Debug-Sessions, falls keine Env gesetzt ist.
+    Environment.SetEnvironmentVariable(LoveConfigLoader.Keys.OmdbApiKey,
+        Environment.GetEnvironmentVariable(LoveConfigLoader.Keys.OmdbApiKey)
+        ?? Environment.GetEnvironmentVariable("OMDB_API_KEY")
+        ?? "eb154ad8");
+
+    Environment.SetEnvironmentVariable(LoveConfigLoader.Keys.WatchlistVisible,
+        Environment.GetEnvironmentVariable(LoveConfigLoader.Keys.WatchlistVisible)
+        ?? "true");
+}
+#endif
 
 var dbFilePath = Path.Combine(dataDirectory, "loveletter.db");
 builder.Services.AddDbContextFactory<LoveLetterDbContext>(options =>
@@ -67,6 +84,7 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapTravelEndpoints();
+app.MapWatchlistEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {

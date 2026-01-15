@@ -326,6 +326,27 @@
         </section>
         <section class="config-section">
             <div class="config-section__header">
+                <h2>Watchlist</h2>
+                <p>Navigation an/aus und OMDB Zugang.</p>
+            </div>
+            <div class="config-grid">
+                <div class="config-field form-group">
+                    <label>Watchlist anzeigen? <span class="env-pill">@LoveConfigLoader.Keys.WatchlistVisible</span></label>
+                    <InputSelect class="config-input form-control" @bind-Value="_model.WatchlistVisible">
+                        <option value="">Standard (leer)</option>
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                    </InputSelect>
+                </div>
+                <div class="config-field form-group">
+                    <label>OMDB ApiKey <span class="env-pill">@LoveConfigLoader.Keys.OmdbApiKey</span></label>
+                    <InputText class="config-input form-control" @bind-Value="_model.OmdbApiKey" />
+                    <small class="config-hint">Erforderlich, um Filme zur Watchlist hinzuzufügen.</small>
+                </div>
+            </div>
+        </section>
+        <section class="config-section">
+            <div class="config-section__header">
                 <h2>Galerie & Highlights</h2>
                 <p>Favoriten-Limit setzen, Highlights verwalten. Galerie wird dynamisch gepflegt.</p>
             </div>
@@ -511,6 +532,10 @@
             TravelAllowUnmark = Environment.GetEnvironmentVariable(LoveConfigLoader.Keys.TravelAllowUnmark)
                                  ?? Environment.GetEnvironmentVariable("TRAVEL_ALLOW_UNMARK")
                                  ?? string.Empty,
+            WatchlistVisible = Content.WatchlistVisible.ToString().ToLowerInvariant(),
+            OmdbApiKey = Environment.GetEnvironmentVariable(LoveConfigLoader.Keys.OmdbApiKey)
+                          ?? Environment.GetEnvironmentVariable("OMDB_API_KEY")
+                          ?? string.Empty,
 
             BucketEyebrow = Content.BucketList.Eyebrow,
             BucketHeading = Content.BucketList.Heading,
@@ -719,7 +744,9 @@
 
             [LoveConfigLoader.Keys.SpotifyClientId] = _model.SpotifyClientId ?? string.Empty,
             [LoveConfigLoader.Keys.SpotifyClientSecret] = _model.SpotifyClientSecret ?? string.Empty,
-            [LoveConfigLoader.Keys.SpotifyPlaylistId] = _model.SpotifyPlaylistId ?? string.Empty
+            [LoveConfigLoader.Keys.SpotifyPlaylistId] = _model.SpotifyPlaylistId ?? string.Empty,
+
+            [LoveConfigLoader.Keys.OmdbApiKey] = _model.OmdbApiKey ?? string.Empty
         };
 
         if (!TryNormalizeDate(_model.RelationshipStartDate, "Startdatum", out var startDateValue))
@@ -749,6 +776,11 @@
             return;
         }
 
+        if (!TryNormalizeBool(_model.WatchlistVisible, "Watchlist anzeigen", out var watchlistVisibleValue))
+        {
+            return;
+        }
+
         if (!TryNormalizeInt(_model.GalleryFavoriteLimit, "Favoriten-Limit", out var favLimitValue))
         {
             return;
@@ -758,6 +790,7 @@
         envEntries[LoveConfigLoader.Keys.MemoriesVisible] = memoriesVisibleValue;
         envEntries[LoveConfigLoader.Keys.TravelVisible] = travelVisibleValue;
         envEntries[LoveConfigLoader.Keys.TravelAllowUnmark] = travelAllowUnmarkValue;
+        envEntries[LoveConfigLoader.Keys.WatchlistVisible] = watchlistVisibleValue;
         envEntries[LoveConfigLoader.Keys.GalleryFavoriteLimit] = favLimitValue;
 
         if (!TryBuildGateQuestions(out var gateQuestionsJson))
@@ -1174,6 +1207,8 @@
         public string TravelVisible { get; set; } = string.Empty;
         public string GalleryFavoriteLimit { get; set; } = string.Empty;
         public string TravelAllowUnmark { get; set; } = string.Empty;
+        public string WatchlistVisible { get; set; } = string.Empty;
+        public string OmdbApiKey { get; set; } = string.Empty;
 
         public string BucketEyebrow { get; set; } = string.Empty;
         public string BucketHeading { get; set; } = string.Empty;
@@ -1187,11 +1222,6 @@
         public string SpotifyPlaylistId { get; set; } = string.Empty;
     }
 }
-
-
-
-
-
 
 
 

@@ -24,6 +24,10 @@
         <NavLink href="/" Match="NavLinkMatch.All" class="app-menu__link" @onclick="CloseMenu">Startseite</NavLink>
         <NavLink href="/bucket-list" class="app-menu__link" @onclick="CloseMenu">Bucket List</NavLink>
         <NavLink href="/gallery" class="app-menu__link" @onclick="CloseMenu">Galerie</NavLink>
+        @if (Content.WatchlistVisible)
+        {
+            <NavLink href="/watchlist" class="app-menu__link" @onclick="CloseMenu">Watchlist</NavLink>
+        }
         @if (Content.TravelVisible)
         {
             <NavLink href="/reisen" class="app-menu__link" @onclick="CloseMenu">Reisekarte</NavLink>
